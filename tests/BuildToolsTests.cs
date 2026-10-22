@@ -1,5 +1,6 @@
 using ToolsMcp;
 using Xunit;
+using static TestIds;
 
 public class BuildToolsTests : IDisposable
 {
@@ -16,13 +17,13 @@ public class BuildToolsTests : IDisposable
     [Fact]
     public async Task BuildKitSavesTheKitAndSaysWhatItHolds()
     {
-        string reply = await Tools().BuildKit("Turning", ["c1", "c2"],
+        string reply = await Tools().BuildKit("Turning", [G("c1"), G("c2")],
             [new CustomToolInput("drill", 7.3, 90)], folder: _folder);
 
         string path = Path.Combine(_folder, "Turning.mKit");
         Assert.Equal($"Saved: {path} - 2 components and 1 custom tools. Import it into ENCY's tool library.", reply);
         Assert.True(File.Exists(path));
-        Assert.Equal(["c1", "c2"], _api.LastBuild!.Value.Ids);
+        Assert.Equal([G("c1"), G("c2")], _api.LastBuild!.Value.Ids);
         Assert.Equal(new CustomTool("drill", 7.3, 90), _api.LastBuild.Value.Custom.Single());
     }
 
@@ -31,10 +32,10 @@ public class BuildToolsTests : IDisposable
     public async Task TheSocketShapeIsListOrNothing()
     {
         Assert.Equal("ERROR: socketShape is empty (released ENCY) or \"list\" (ENCY builds after 1 September 2026)",
-            await Tools().BuildKit("Kit", ["c1"], socketShape: "tree", folder: _folder));
+            await Tools().BuildKit("Kit", [G("c1")], socketShape: "tree", folder: _folder));
         Assert.False(_api.Called(nameof(IToolsApi.BuildKit)));
 
-        await Tools().BuildKit("Kit", ["c1"], socketShape: "list", folder: _folder);
+        await Tools().BuildKit("Kit", [G("c1")], socketShape: "list", folder: _folder);
         Assert.Equal("list", _api.LastBuild!.Value.Sockets);
     }
 
@@ -54,5 +55,20 @@ public class BuildToolsTests : IDisposable
 
         Assert.Equal("Saved: " + Path.Combine(_folder, "7.5mm Drill.mKit") + ". Import it into ENCY's tool library.", reply);
         Assert.Equal(new CustomTool("drill", 7.5, 60), _api.LastCustomTool);
+    }
+
+    /** "Leave empty", the description says - and an agent passes "" for an empty string. */
+    [Fact]
+    public async Task AnEmptySocketShapeIsWhatReleasedEncyReads()
+    {
+        Assert.StartsWith("Saved:", await Tools().BuildKit("Kit", [G("c1")], socketShape: "", folder: _folder));
+        Assert.Null(_api.LastBuild!.Value.Sockets);
+    }
+
+    [Fact]
+    public async Task BuildKitWithNoComponentIdsStillBuildsItsCustomTools()
+    {
+        Assert.StartsWith("Saved:", await Tools().BuildKit("Kit", null!, [new CustomToolInput("drill", 7.3, 90)], folder: _folder));
+        Assert.Empty(_api.LastBuild!.Value.Ids);
     }
 }

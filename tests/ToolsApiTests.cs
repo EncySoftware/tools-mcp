@@ -113,4 +113,18 @@ public class ToolsApiTests
         Assert.False(library.Items[0].Present);
         Assert.Equal("10mm Drill", library.Items[0].Name);
     }
+
+    /** An agent passes "" for a filter it does not mean: sent as kit=, it filtered for a kit with no name. */
+    [Fact]
+    public async Task BlankFiltersAreNotSent()
+    {
+        var stub = new StubHandler().OnJson("GET", "/api/components", """{"total":0,"page":0,"size":20,"items":[]}""");
+
+        await StubHandler.Api(stub).FindComponents(new ComponentQuery(Query: "", Kit: "  ", Maker: "Iscar"), "t");
+
+        string url = stub.Requests[0].Uri.OriginalString;
+        Assert.Contains("maker=Iscar", url);
+        Assert.DoesNotContain("q=", url);
+        Assert.DoesNotContain("kit=", url);
+    }
 }

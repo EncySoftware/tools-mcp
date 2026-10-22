@@ -32,10 +32,13 @@ public class BuildTools(IToolsApi api, TokenProvider tokens)
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
-            if (SocketShapeError(socketShape) is { } refused) return refused;
+            string? shape = SocketShape(socketShape);
+            if (SocketShapeError(shape) is { } refused) return refused;
+            var (ids, bad) = Ids.All(componentIds);
+            if (bad != null) return Ids.NotAComponent(bad);
             var custom = (customTools ?? []).Select(t => t.ToCustomTool()).ToList();
-            var file = await api.BuildKit(name, componentIds, custom, socketShape, token);
-            return $"Saved: {SavedFiles.Save(file, folder)} - {componentIds.Length} components and {custom.Count} custom tools. "
+            var file = await api.BuildKit(name, ids, custom, shape, token);
+            return $"Saved: {SavedFiles.Save(file, folder)} - {ids.Count} components and {custom.Count} custom tools. "
                    + ImportHint;
         });
 
@@ -57,8 +60,10 @@ public class BuildTools(IToolsApi api, TokenProvider tokens)
 
     /**
      * ENCY changed on 1 September 2026 how a socket names its connections - a list rather than one - and each build
-     * refuses the other's shape. Empty keeps what every released ENCY reads.
+     * refuses the other's shape. Empty - null, or "" as an agent passes it - keeps what every released ENCY reads.
      */
+    internal static string? SocketShape(string? raw) => string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+
     internal static string? SocketShapeError(string? socketShape) =>
         socketShape is null or "list"
             ? null

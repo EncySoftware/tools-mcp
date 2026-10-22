@@ -42,10 +42,14 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
         [Description("Rows a page, 1 to 50")] int pageSize = 20) =>
         Replies.WithToken(tokens, async token =>
         {
-            if (sort != null && !Sorts.Contains(sort)) return "ERROR: sort is name, diameter or length";
+            if (!string.IsNullOrWhiteSpace(sort) && !Sorts.Contains(sort)) return "ERROR: sort is name, diameter or length";
+            string? fits = null;
+            if (!string.IsNullOrWhiteSpace(fitsComponentId) && (fits = Ids.Of(fitsComponentId)) == null)
+                return Ids.NotAComponent(fitsComponentId);
             int size = Math.Clamp(pageSize, 1, MaxPageSize);
             var search = new ComponentQuery(query, kit, classCode, family, machineType, maker, coating, coolant, shank,
-                minDiameterMm, maxDiameterMm, fitsComponentId, buildableOnly ? true : null, encyVersion, sort,
+                minDiameterMm, maxDiameterMm, fits, buildableOnly ? true : null, encyVersion,
+                string.IsNullOrWhiteSpace(sort) ? null : sort,
                 descending, Math.Max(0, page), size);
             var found = await api.FindComponents(search, token);
             var counts = found.Items.Count == 0
@@ -84,13 +88,14 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
         [Description("A shank family")] string? shank = null,
         [Description("Smallest cutting diameter, mm")] double? minDiameterMm = null,
         [Description("Largest cutting diameter, mm")] double? maxDiameterMm = null,
-        [Description("Only what fits this component")] string? fitsComponentId = null,
         [Description("Only what can go into a kit or a library")] bool buildableOnly = false,
         [Description("The ENCY version: 3 or 2")] int? encyVersion = null) =>
         Replies.WithToken(tokens, async token =>
         {
+            // no "fits" here: the facet routes ignore it, and the facets of the whole search would pass for
+            // what fits one component (final review, 2026-10-22)
             var values = await api.GetFilterValues(new ComponentQuery(query, kit, classCode, family, machineType, maker,
-                coating, coolant, shank, minDiameterMm, maxDiameterMm, fitsComponentId, buildableOnly ? true : null,
+                coating, coolant, shank, minDiameterMm, maxDiameterMm, null, buildableOnly ? true : null,
                 encyVersion), token);
             var reply = new StringBuilder();
             List("Classes (classCode)", values.Classes, s => $"{s.Title ?? s.Section} ({s.Section}): {s.Count}", reply);

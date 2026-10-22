@@ -91,4 +91,19 @@ public class CatalogueToolsTests : IDisposable
 
         Assert.Equal("ERROR: kit not found", await Tools().DescribeKit("x"));
     }
+
+    /** An ENCY 2 library holds hundreds of tools with a dozen parameters each - past what an agent's tool reply may hold. */
+    [Fact]
+    public async Task DescribeKitListsAtMostFiftyItems()
+    {
+        var items = Enumerable.Range(1, 120).Select(i => new KitItem("mill-tool", $"Mill {i}", "End mill", i, 50, null)).ToList();
+        _api.KitDetails["starter"] = new KitDetail("starter", "Starter kit (metric)", "Universal library", "MIXED", 2, "db",
+            "About it.", 120, [], items);
+
+        string reply = await Tools().DescribeKit("starter");
+
+        Assert.Contains("Mill 50 -", reply);
+        Assert.DoesNotContain("Mill 51 -", reply);
+        Assert.Contains("and 70 more: find_components(kit: \"starter\")", reply);
+    }
 }

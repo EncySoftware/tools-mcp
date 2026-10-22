@@ -8,6 +8,12 @@ namespace ToolsMcp;
 [McpServerToolType]
 public class CatalogueTools(IToolsApi api, TokenProvider tokens)
 {
+    /**
+     * An ENCY 2 library holds hundreds of tools with a dozen parameters each: listed whole, describe_kit came near the
+     * limit of what an agent's tool reply may hold (final review, 2026-10-22). The rest is a search away.
+     */
+    internal const int ShownItems = 50;
+
     [McpServerTool(Name = "whoami"), Description(
         "Who the agent works as on tools.encycam.com: the account whose supplier catalogues and libraries it sees. " +
         "Call it first when in doubt.")]
@@ -66,7 +72,7 @@ public class CatalogueTools(IToolsApi api, TokenProvider tokens)
             if (kit.Items.Count > 0)
             {
                 reply.AppendLine("Items:");
-                foreach (var item in kit.Items)
+                foreach (var item in kit.Items.Take(ShownItems))
                 {
                     reply.Append($"  {item.Name} - {item.Kind ?? item.Section}");
                     if (item.DiameterMm is { } d) reply.Append($", Ø{Replies.Mm(d)} mm");
@@ -75,6 +81,8 @@ public class CatalogueTools(IToolsApi api, TokenProvider tokens)
                         reply.Append(" - " + string.Join("; ", p.Select(kv => $"{kv.Key}: {kv.Value}")));
                     reply.AppendLine();
                 }
+                if (kit.Items.Count > ShownItems)
+                    reply.AppendLine($"  … and {kit.Items.Count - ShownItems} more: find_components(kit: \"{kit.Slug}\")");
             }
             reply.Append($"download_kit(\"{kit.Slug}\") saves its file.");
             return reply.ToString();

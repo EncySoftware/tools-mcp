@@ -18,9 +18,10 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens)
     public Task<string> DescribeComponent([Description("The component's id, from find_components")] string id) =>
         Replies.WithToken(tokens, async token =>
         {
-            var detail = await api.GetComponent(id, token);
-            if (detail == null) return NoComponent(id);
-            var compat = await api.GetCompat(id, token);
+            if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
+            var detail = await api.GetComponent(cid, token);
+            if (detail == null) return NoComponent(cid);
+            var compat = await api.GetCompat(cid, token);
             var c = detail.Component;
             var reply = new StringBuilder(Replies.Line(c)).AppendLine();
             if (c.Kind != null) reply.AppendLine("Kind: " + c.Kind);
@@ -52,15 +53,16 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens)
         [Description("Rows of each side to show, 1 to 100")] int limit = 20) =>
         Replies.WithToken(tokens, async token =>
         {
+            if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
             if (direction is not ("both" or "holders" or "accepts")) return "ERROR: direction is both, holders or accepts";
-            var compat = await api.GetCompat(id, token);
-            if (compat == null) return NoComponent(id);
+            var compat = await api.GetCompat(cid, token);
+            if (compat == null) return NoComponent(cid);
             int shown = Math.Clamp(limit, 1, 100);
             var reply = new StringBuilder();
             if (compat.PlugLabel != null) reply.AppendLine("Connection: " + compat.PlugLabel);
             if (direction is "both" or "holders") Side("Goes into", compat.PlugsIntoTotal, compat.PlugsInto, shown, reply);
             if (direction is "both" or "accepts") Side("Takes", compat.AcceptsTotal, compat.Accepts, shown, reply);
-            reply.Append($"All of them: find_components(fitsComponentId: \"{id}\")");
+            reply.Append($"All of them: find_components(fitsComponentId: \"{cid}\")");
             return reply.ToString();
         });
 
@@ -70,8 +72,9 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens)
     public Task<string> AssembleToSpindle([Description("The component's id, e.g. a cutter or an insert")] string id) =>
         Replies.WithToken(tokens, async token =>
         {
-            var chain = await api.GetAssembly(id, token);
-            if (chain == null) return NoComponent(id);
+            if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
+            var chain = await api.GetAssembly(cid, token);
+            if (chain == null) return NoComponent(cid);
             var reply = new StringBuilder();
             for (int i = 0; i < chain.Steps.Count; i++)
             {
@@ -89,18 +92,20 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens)
         Replies.WithToken(tokens, async token =>
         {
             if (componentIds.Length is < 2 or > MaxFitIds) return $"ERROR: check_fit takes 2 to {MaxFitIds} component ids";
-            var names = await NamesOf(componentIds, token);
-            var takes = await api.GetAcceptsAmong(componentIds, token);
+            var (ids, bad) = Ids.All(componentIds);
+            if (bad != null) return Ids.NotAComponent(bad);
+            var names = await NamesOf(ids, token);
+            var takes = await api.GetAcceptsAmong(ids, token);
             var reply = new StringBuilder();
             var fitting = new HashSet<string>();
             foreach (var (holder, taken) in takes)
                 foreach (var part in taken)
                 {
-                    reply.AppendLine($"{names[holder]} takes {names.GetValueOrDefault(part, part)}");
+                    reply.AppendLine($"{names.GetValueOrDefault(holder, holder)} takes {names.GetValueOrDefault(part, part)}");
                     fitting.Add(holder);
                     fitting.Add(part);
                 }
-            var alone = componentIds.Where(i => !fitting.Contains(i)).Distinct().ToList();
+            var alone = ids.Where(i => !fitting.Contains(i)).Distinct().ToList();
             if (fitting.Count == 0) reply.AppendLine("None of these fits another.");
             if (alone.Count > 0)
                 reply.Append("Fit with none of the others: " + string.Join(", ", alone.Select(i => $"{names[i]} [id {i}]")));
@@ -116,6 +121,7 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens)
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
+            if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
             ComponentFileKind? fileKind = kind switch
             {
                 "model" => ComponentFileKind.Model,
@@ -124,10 +130,10 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens)
                 _ => null,
             };
             if (fileKind == null) return "ERROR: kind is model, drawing or picture";
-            var detail = await api.GetComponent(id, token);
-            if (detail == null) return NoComponent(id);
+            var detail = await api.GetComponent(cid, token);
+            if (detail == null) return NoComponent(cid);
             string name = detail.Component.Name;
-            var file = await api.GetComponentFile(id, fileKind.Value, token);
+            var file = await api.GetComponentFile(cid, fileKind.Value, token);
             if (file == null) return $"ERROR: {name} has no {kind} on tools.encycam.com";
             string fileName = fileKind switch
             {

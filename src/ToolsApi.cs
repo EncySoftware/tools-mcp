@@ -278,9 +278,10 @@ public class ToolsApi : IToolsApi
         return Params(pairs.ToArray());
     }
 
+    /** Only what was given: an agent passes "" for a filter it does not mean, and kit= filtered for a kit with no name. */
     private static string Params(params (string Name, object? Value)[] pairs)
     {
-        var sent = pairs.Where(p => p.Value != null)
+        var sent = pairs.Where(p => p.Value != null && !(p.Value is string s && string.IsNullOrWhiteSpace(s)))
             .Select(p => p.Name + "=" + Esc(p.Value switch
             {
                 bool b => b ? "true" : "false",

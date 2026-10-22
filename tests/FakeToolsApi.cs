@@ -134,7 +134,6 @@ internal sealed class FakeToolsApi : IToolsApi
 
     // ------------------------------------------------------------------ libraries, kept as the server keeps them
     public Dictionary<string, Library> Libraries { get; } = new();
-    private int _next = 1;
 
     public Task<IReadOnlyList<LibrarySummary>> ListLibraries(string token)
     {
@@ -154,7 +153,7 @@ internal sealed class FakeToolsApi : IToolsApi
     {
         Saw(nameof(CreateLibrary), token);
         var now = DateTimeOffset.Parse("2026-10-22T08:00:00Z");
-        var library = new Library("L" + _next++, name, now, now, items.Select(ItemOf).ToList());
+        var library = new Library(Guid.NewGuid().ToString("D"), name, now, now, items.Select(ItemOf).ToList());
         Libraries[library.Id] = library;
         return Task.FromResult(library);
     }
@@ -175,7 +174,7 @@ internal sealed class FakeToolsApi : IToolsApi
         var library = Libraries[id];
         var kept = library.Items
             .Where(i => !items.Any(e => (e.Component != null && e.Component == i.Component)
-                                        || (e.Custom != null && e.Custom == i.Custom)))
+                                        || (e.Custom != null && i.Custom != null && SameTool(e.Custom, i.Custom))))
             .ToList();
         return Task.FromResult(Libraries[id] = library with { Items = kept });
     }
@@ -199,6 +198,12 @@ internal sealed class FakeToolsApi : IToolsApi
         LastBuild = (Libraries[id].Name, [], [], sockets);
         return Task.FromResult(new DownloadedFile(Libraries[id].Name + ".mKit", [9]));
     }
+
+    /** As the server matches a custom tool to take out: by its numbers, and by name and shank only where given. */
+    private static bool SameTool(CustomTool named, CustomTool stored) =>
+        named.Family == stored.Family && named.DiameterMm == stored.DiameterMm && named.LengthMm == stored.LengthMm
+        && (named.Name == null || named.Name == stored.Name)
+        && (named.ShankDiameterMm == null || named.ShankDiameterMm == stored.ShankDiameterMm);
 
     /** As the server fills an item in: the component's own name and kit, or the custom tool as given. */
     private LibraryItem ItemOf(LibraryEntry entry)

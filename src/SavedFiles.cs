@@ -17,7 +17,7 @@ public static class SavedFiles
     /// It goes through a ".part" file, so a write cut short leaves nothing behind that looks like a kit.</summary>
     public static string Save(DownloadedFile file, string? folder)
     {
-        string dir = Path.GetFullPath(string.IsNullOrWhiteSpace(folder) ? DefaultFolder : folder);
+        string dir = string.IsNullOrWhiteSpace(folder) ? DefaultFolder : FolderOf(folder.Trim());
         Directory.CreateDirectory(dir);
         string path = FreeName(dir, Safe(file.FileName));
         string part = path + ".part";
@@ -32,6 +32,20 @@ public static class SavedFiles
             File.Delete(part);
             throw;
         }
+    }
+
+    /// <summary>
+    /// A folder the person named: "~" is their home, and anything else must be a full path. A relative one resolved against
+    /// the folder the agent's server runs in - often the person's project - and "~/Desktop" made a folder named "~" there
+    /// (final review, 2026-10-22).
+    /// </summary>
+    private static string FolderOf(string folder)
+    {
+        if (folder == "~" || folder.StartsWith("~/", StringComparison.Ordinal) || folder.StartsWith("~\\", StringComparison.Ordinal))
+            folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), folder.Length > 2 ? folder[2..] : "");
+        if (!Path.IsPathFullyQualified(folder))
+            throw new ArgumentException($@"folder must be a full path, such as C:\Users\you\Desktop, or start with ~ - not '{folder}'");
+        return Path.GetFullPath(folder);
     }
 
     /// <summary>The name with every character a disk refuses replaced by '_', and no trailing dots or spaces,

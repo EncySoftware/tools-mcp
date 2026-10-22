@@ -45,4 +45,24 @@ public class SavedFilesTests : IDisposable
     {
         Assert.EndsWith(Path.Combine("Downloads", "ENCY tools"), SavedFiles.DefaultFolder);
     }
+
+    [Fact]
+    public void AHomeFolderIsExpanded()
+    {
+        string name = "tools-home-" + Guid.NewGuid().ToString("N")[..8];
+        string path = SavedFiles.Save(new DownloadedFile("Kit.mKit", [1]), "~/" + name);
+        try
+        {
+            Assert.Equal(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), name, "Kit.mKit"), path);
+        }
+        finally { Directory.Delete(Path.GetDirectoryName(path)!, true); }
+    }
+
+    /** A relative folder lands inside whatever folder the agent's server runs in - often the person's project. */
+    [Fact]
+    public void ARelativeFolderIsRefused()
+    {
+        var e = Assert.Throws<ArgumentException>(() => SavedFiles.Save(new DownloadedFile("Kit.mKit", [1]), "kits/new"));
+        Assert.Contains("full path", e.Message);
+    }
 }

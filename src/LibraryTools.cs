@@ -28,8 +28,9 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
     public Task<string> ShowLibrary([Description("The library's id, from list_libraries")] string id) =>
         Replies.WithToken(tokens, async token =>
         {
-            var library = await api.GetLibrary(id, token);
-            return library == null ? NoLibrary(id) : Contents(library);
+            if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
+            var library = await api.GetLibrary(lid, token);
+            return library == null ? NoLibrary(lid) : Contents(library);
         });
 
     [McpServerTool(Name = "create_library"), Description(
@@ -42,6 +43,8 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
         [Description("Create it even beside a library of the same name")] bool force = false) =>
         Replies.WithToken(tokens, async token =>
         {
+            var (entries, refused) = Entries(componentIds, customTools);
+            if (refused != null) return refused;
             if (!force)
             {
                 var same = (await api.ListLibraries(token)).FirstOrDefault(l =>
@@ -50,7 +53,7 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
                     return $"ERROR: you already have a library named '{same.Name}' [id {same.Id}] - add_to_library adds to it; "
                            + "force=true makes a second one";
             }
-            var library = await api.CreateLibrary(name, Entries(componentIds, customTools), token);
+            var library = await api.CreateLibrary(name, entries, token);
             return $"Created '{library.Name}' [id {library.Id}] with {library.Items.Count} items. " + Replies.InEncy;
         });
 
@@ -63,27 +66,38 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
         [Description("Custom drills and end mills to add")] CustomToolInput[]? customTools = null) =>
         Replies.WithToken(tokens, async token =>
         {
-            var entries = Entries(componentIds, customTools);
+            if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
+            var (entries, refused) = Entries(componentIds, customTools);
+            if (refused != null) return refused;
             if (entries.Count == 0) return "ERROR: name at least one component id or custom tool to add";
-            var before = await api.GetLibrary(id, token);
-            if (before == null) return NoLibrary(id);
-            var after = await api.AddToLibrary(id, entries, token);
+            var before = await api.GetLibrary(lid, token);
+            if (before == null) return NoLibrary(lid);
+            var after = await api.AddToLibrary(lid, entries, token);
             return $"'{after.Name}' [id {after.Id}] now holds {after.Items.Count} items (was {before.Items.Count}). "
                    + Replies.InEncy;
         });
 
     [McpServerTool(Name = "remove_from_library"), Description(
-        "Takes the named items out of a library and keeps every other one as it is. Only when the person asked to " +
-        "remove these items.")]
+        "Takes the named items out of a library and keeps every other one as it is: a component by its id, a custom tool " +
+        "by its numbers. Only when the person asked to remove these items.")]
     public Task<string> RemoveFromLibrary(
         [Description("The library's id")] string id,
         [Description("Components to take out, by id")] string[]? componentIds = null,
         [Description("Custom tools to take out, by their numbers")] CustomToolInput[]? customTools = null) =>
         Replies.WithToken(tokens, async token =>
         {
-            var entries = Entries(componentIds, customTools);
+            if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
+            var (entries, refused) = Entries(componentIds, customTools);
+            if (refused != null) return refused;
             if (entries.Count == 0) return "ERROR: name at least one component id or custom tool to take out";
-            return Contents(await api.RemoveFromLibrary(id, entries, token)) + "\n" + Replies.InEncy;
+            var before = await api.GetLibrary(lid, token);
+            if (before == null) return NoLibrary(lid);
+            var after = await api.RemoveFromLibrary(lid, entries, token);
+            // what was named but not there: a remove that found nothing said nothing, and read as done (final review)
+            var absent = entries.Where(e => !before.Items.Any(i => Holds(i, e))).Select(Describe).ToList();
+            var reply = new StringBuilder($"Removed {before.Items.Count - after.Items.Count}.");
+            if (absent.Count > 0) reply.Append(" Not in the library: " + string.Join(", ", absent) + ".");
+            return reply.AppendLine().AppendLine(Contents(after)).Append(Replies.InEncy).ToString();
         });
 
     [McpServerTool(Name = "rename_library"), Description("Renames a library; what it holds stays as it is.")]
@@ -92,7 +106,8 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
         [Description("The new name")] string name) =>
         Replies.WithToken(tokens, async token =>
         {
-            var library = await api.RenameLibrary(id, name, token);
+            if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
+            var library = await api.RenameLibrary(lid, name, token);
             return $"Renamed to '{library.Name}' [id {library.Id}]. " + Replies.InEncy;
         });
 
@@ -101,9 +116,10 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
     public Task<string> DeleteLibrary([Description("The library's id")] string id) =>
         Replies.WithToken(tokens, async token =>
         {
-            var library = await api.GetLibrary(id, token);
-            if (library == null) return NoLibrary(id);
-            await api.DeleteLibrary(id, token);
+            if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
+            var library = await api.GetLibrary(lid, token);
+            if (library == null) return NoLibrary(lid);
+            await api.DeleteLibrary(lid, token);
             return $"Deleted '{library.Name}'.";
         });
 
@@ -116,15 +132,45 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
-            if (BuildTools.SocketShapeError(socketShape) is { } refused) return refused;
-            var file = await api.ExportLibrary(id, socketShape, token);
+            if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
+            string? shape = BuildTools.SocketShape(socketShape);
+            if (BuildTools.SocketShapeError(shape) is { } refused) return refused;
+            var file = await api.ExportLibrary(lid, shape, token);
             return $"Saved: {SavedFiles.Save(file, folder)}. " + BuildTools.ImportHint;
         });
 
-    private static List<LibraryEntry> Entries(string[]? componentIds, CustomToolInput[]? customTools) =>
-        (componentIds ?? []).Select(c => new LibraryEntry(Component: c))
-        .Concat((customTools ?? []).Select(t => new LibraryEntry(Custom: t.ToCustomTool())))
-        .ToList();
+    /** The items to put in or take out, with every component id as the server spells it - or why there are none. */
+    private static (List<LibraryEntry> Entries, string? Refused) Entries(string[]? componentIds, CustomToolInput[]? customTools)
+    {
+        var (ids, bad) = Ids.All(componentIds);
+        if (bad != null) return ([], Ids.NotAComponent(bad));
+        var entries = ids.Select(c => new LibraryEntry(Component: c))
+            .Concat((customTools ?? []).Select(t => new LibraryEntry(Custom: t.ToCustomTool())))
+            .ToList();
+        return (entries, null);
+    }
+
+    /** Whether a stored item is the one named: a component by its id; a custom tool as the server matches it - by its
+     * numbers, and by name and shank only where they are given. */
+    private static bool Holds(LibraryItem item, LibraryEntry named)
+    {
+        if (named.Component != null) return item.Component == named.Component;
+        if (named.Custom is not { } n || item.Custom is not { } s) return false;
+        return n.Family == s.Family && n.DiameterMm == s.DiameterMm && n.LengthMm == s.LengthMm
+               && (n.Name == null || n.Name == s.Name)
+               && (n.ShankDiameterMm == null || n.ShankDiameterMm == s.ShankDiameterMm);
+    }
+
+    private static string Describe(LibraryEntry entry) =>
+        entry.Custom is { } t ? Custom(t) : entry.Component!;
+
+    private static string Custom(CustomTool t)
+    {
+        var text = new StringBuilder($"custom {t.Family} Ø{Replies.Mm(t.DiameterMm)} L {Replies.Mm(t.LengthMm)} mm");
+        if (t.ShankDiameterMm is { } shank) text.Append($", shank Ø{Replies.Mm(shank)} mm");
+        if (t.Name != null) text.Append($" ({t.Name})");
+        return text.ToString();
+    }
 
     private static string NoLibrary(string id) => $"ERROR: no library {id}";
 
@@ -136,8 +182,7 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
             reply.AppendLine();
             if (item.Custom is { } t)
             {
-                reply.Append($"  custom {t.Family} Ø{Replies.Mm(t.DiameterMm)} L {Replies.Mm(t.LengthMm)} mm");
-                if (t.Name != null) reply.Append($" ({t.Name})");
+                reply.Append("  " + Custom(t));
                 continue;
             }
             reply.Append($"  {item.Name} - {item.KitName ?? item.Kit}");
