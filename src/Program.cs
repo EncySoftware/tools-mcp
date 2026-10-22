@@ -46,6 +46,7 @@ _ = VersionCheck.Hint().ContinueWith(t => { if (t.Result is { } h) Console.Error
 
 builder.Services.AddSingleton<IToolsApi, ToolsApi>();
 builder.Services.AddSingleton<TokenProvider>();
+builder.Services.AddSingleton<IFileSink>(LocalFiles.Instance);
 
 builder.Services
     .AddMcpServer()

@@ -6,8 +6,11 @@ namespace ToolsMcp;
 
 /// <summary>Who the agent works as, and the kits and supplier catalogues the account can see.</summary>
 [McpServerToolType]
-public class CatalogueTools(IToolsApi api, TokenProvider tokens)
+public class CatalogueTools(IToolsApi api, TokenProvider tokens, IFileSink? files = null)
 {
+    /** Where a saved file goes: the person's disk at home, a link on the hosted server. */
+    private readonly IFileSink _files = files ?? LocalFiles.Instance;
+
     /**
      * An ENCY 2 library holds hundreds of tools with a dozen parameters each: listed whole, describe_kit came near the
      * limit of what an agent's tool reply may hold (final review, 2026-10-22). The rest is a search away.
@@ -96,13 +99,13 @@ public class CatalogueTools(IToolsApi api, TokenProvider tokens)
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
+            _files.Check(folder);
             var kit = await api.GetKit(slug, token);
             if (kit == null) return NoKit(slug);
             if (kit.Format == "gtc")
                 return $"ERROR: {kit.Name} is a supplier catalogue - its file is the catalogue's own data, which ENCY "
                        + "cannot open. Pick its components with find_components, then build_kit or add_to_library.";
-            string path = SavedFiles.Save(await api.DownloadKit(slug, token), folder);
-            return "Saved: " + path;
+            return _files.Deliver(await api.DownloadKit(slug, token), folder);
         });
 
     private static string NoKit(string slug) => $"ERROR: no kit '{slug}' - list_kits shows the slugs this account can see";

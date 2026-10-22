@@ -7,20 +7,22 @@ namespace ToolsMcp;
 /// The hosted server's door for /mcp. One credential lets a request in: `Authorization: Bearer` with a person's access
 /// token from the trusted realm (<see cref="UserTokens"/>), and the call then runs as that person
 /// (<see cref="Caller.Enter"/>). There is no key, unlike dmc-mcp's door: behind a key there is one account, and everyone's
-/// tools would land in its libraries. The resource metadata paths are public. Tokens never reach a log: a refusal is
-/// logged by its reason.
+/// tools would land in its libraries. The resource metadata paths and the files' links are public. Tokens never reach
+/// a log: a refusal is logged by its reason.
 /// </summary>
 public sealed class Door(UserTokens tokens, string metadataUrl, ILogger log)
 {
     public const string MetadataPath = "/.well-known/oauth-protected-resource";
     public const string McpMetadataPath = MetadataPath + "/mcp";
+    /** A file's link: its random id is the credential, so it needs no token (LinkFiles). */
+    public const string FilesPath = "/mcp/files/";
 
     public async Task Handle(HttpContext ctx, Func<Task> next)
     {
         var path = ctx.Request.Path.Value ?? "";
-        if (path is MetadataPath or McpMetadataPath)
+        if (path is MetadataPath or McpMetadataPath || path.StartsWith(FilesPath, StringComparison.Ordinal))
         {
-            await next(); // how a client learns where to sign in: no credentials needed
+            await next(); // where to sign in, and a file's link: no credentials needed
             return;
         }
         var bearer = Bearer(ctx.Request.Headers.Authorization.ToString());

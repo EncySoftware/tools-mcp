@@ -80,7 +80,8 @@ public static class ServeCommand
 
     /** The startup line: who may come in. */
     internal static string Modes(ServeSettings settings) =>
-        $"Ways in: {settings.Tokens.Describe()}; each call runs as the token's person; resource metadata at {settings.MetadataUrl}";
+        $"Ways in: {settings.Tokens.Describe()}; each call runs as the token's person; files as links for 1 hour; "
+        + $"resource metadata at {settings.MetadataUrl}";
 
     internal static WebApplication Build(string[] args, ServeSettings settings, Action<IServiceCollection>? configure = null)
     {
@@ -90,9 +91,12 @@ public static class ServeCommand
 
         builder.Services.AddSingleton<IToolsApi, ToolsApi>();
         builder.Services.AddSingleton<TokenProvider, CallerTokens>();
+        builder.Services.AddSingleton(new DownloadStore(Path.Combine(settings.DataDir, "files")));
+        builder.Services.AddSingleton<IFileSink>(sp => new LinkFiles(sp.GetRequiredService<DownloadStore>(), settings.PublicUrl));
+        builder.Services.AddHostedService<DownloadJanitor>();
         builder.Services.AddSingleton(new IssuerKeys(settings.Tokens.Issuer));
         builder.Services.AddSingleton(sp => new UserTokens(settings.Tokens, sp.GetRequiredService<IssuerKeys>()));
-        configure?.Invoke(builder.Services); // tests replace the site and the issuer's keys
+        configure?.Invoke(builder.Services); // tests replace the site, the issuer's keys and the store's clock
         builder.Services
             .AddMcpServer(o => o.ServerInstructions = Instructions)
             // Stateless: nothing to lose on a restart or an update - a session would end with each, and a client that
@@ -123,6 +127,14 @@ public static class ServeCommand
         var typeInfo = McpJsonUtilities.DefaultOptions.GetTypeInfo(typeof(ProtectedResourceMetadata));
         app.MapGet(Door.McpMetadataPath, () => Results.Json(metadata, typeInfo));
         app.MapGet(Door.MetadataPath, () => Results.Json(metadata, typeInfo));
+        // A link opens without a token (the door lets /mcp/files/ through): its 128-bit id is the credential. Nothing
+        // about an unknown or expired one is told.
+        app.MapGet(Door.FilesPath + "{id}/{name}", (string id, DownloadStore store, HttpContext ctx) =>
+        {
+            if (store.Find(id) is not { } file) return Results.NotFound();
+            ctx.Response.Headers.CacheControl = "no-store";
+            return Results.File(file.Path, "application/octet-stream", file.Name);
+        });
         app.MapMcp("/mcp");
 
         var log = loggers.CreateLogger("ToolsMcp.Serve");

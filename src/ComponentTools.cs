@@ -7,8 +7,11 @@ namespace ToolsMcp;
 
 /// <summary>One component: its parameters, what fits it, the chain up to the spindle, and its files.</summary>
 [McpServerToolType]
-public class ComponentTools(IToolsApi api, TokenProvider tokens)
+public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? files = null)
 {
+    /** Where a saved file goes: the person's disk at home, a link on the hosted server. */
+    private readonly IFileSink _files = files ?? LocalFiles.Instance;
+
     /** The names of check_fit's ids are looked up one by one, so the ids are capped; the API's own cap is 200. */
     internal const int MaxFitIds = 50;
 
@@ -121,6 +124,7 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens)
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
+            _files.Check(folder);
             if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
             ComponentFileKind? fileKind = kind switch
             {
@@ -141,7 +145,7 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens)
                 ComponentFileKind.Drawing => name + " - drawing.jpg",
                 _ => name + " - photo.jpg",
             };
-            return "Saved: " + SavedFiles.Save(file with { FileName = fileName }, folder);
+            return _files.Deliver(file with { FileName = fileName }, folder);
         });
 
     private static string NoComponent(string id) =>

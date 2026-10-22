@@ -10,8 +10,11 @@ namespace ToolsMcp;
 /// Tools catalogue extension. This is where what an agent finds is meant to end up.
 /// </summary>
 [McpServerToolType]
-public class LibraryTools(IToolsApi api, TokenProvider tokens)
+public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files = null)
 {
+    /** Where a saved file goes: the person's disk at home, a link on the hosted server. */
+    private readonly IFileSink _files = files ?? LocalFiles.Instance;
+
     [McpServerTool(Name = "list_libraries"), Description(
         "The person's libraries: each with its id, how many items it holds and how many of them are gone from the catalogue.")]
     public Task<string> ListLibraries() => Replies.WithToken(tokens, async token =>
@@ -132,11 +135,12 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens)
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
+            _files.Check(folder);
             if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
             string? shape = BuildTools.SocketShape(socketShape);
             if (BuildTools.SocketShapeError(shape) is { } refused) return refused;
             var file = await api.ExportLibrary(lid, shape, token);
-            return $"Saved: {SavedFiles.Save(file, folder)}. " + BuildTools.ImportHint;
+            return $"{_files.Deliver(file, folder)}. " + BuildTools.ImportHint;
         });
 
     /** The items to put in or take out, with every component id as the server spells it - or why there are none. */

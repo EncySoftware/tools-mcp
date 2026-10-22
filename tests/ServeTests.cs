@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -39,11 +40,15 @@ public class ServeTests : IAsyncLifetime
     private ServeSettings Settings() => new(Path.Combine(_data, _apps.Count.ToString()),
         new TokenSettings(TestIssuer.Issuer, new[] { "dealerspace-mcp", "tools-encycam" }, Array.Empty<string>()), PublicUrl);
 
-    private async Task<HttpClient> Start(FakeToolsApi api)
+    /** files: the download store, made for the server's files folder (a clock of the test's). */
+    private async Task<HttpClient> Start(FakeToolsApi api, Func<string, DownloadStore>? files = null)
     {
-        var app = ServeCommand.Build(new[] { "--urls", "http://127.0.0.1:0" }, Settings(), s =>
+        var settings = Settings();
+        _lastFiles = Path.Combine(settings.DataDir, "files");
+        var app = ServeCommand.Build(new[] { "--urls", "http://127.0.0.1:0" }, settings, s =>
         {
             s.AddSingleton<IToolsApi>(api);
+            if (files != null) s.AddSingleton(files(_lastFiles));
             s.AddSingleton(new IssuerKeys(TestIssuer.Issuer, _realm));
             s.AddSingleton<ILoggerProvider>(_logs);
             s.Configure<LoggerFilterOptions>(o => o.MinLevel = LogLevel.Trace);
@@ -52,6 +57,12 @@ public class ServeTests : IAsyncLifetime
         await app.StartAsync();
         return new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
     }
+
+    private string _lastFiles = "";
+
+    /** What the last server started keeps in its download store. */
+    private string[] Kept() =>
+        Directory.Exists(_lastFiles) ? Directory.GetFiles(_lastFiles, "*", SearchOption.AllDirectories) : Array.Empty<string>();
 
     private static HttpRequestMessage Rpc(string body, string? bearer)
     {
@@ -246,6 +257,73 @@ public class ServeTests : IAsyncLifetime
 
         var restarted = await Start(api);
         Assert.StartsWith("Signed in", await Reply(await restarted.SendAsync(Call("whoami", new { }, anna))));
+    }
+
+    // ------------------------------------------------------------------ files
+
+    private static readonly object Mills = new { name = "Mills", componentIds = new[] { TestIds.G("c1") } };
+
+    /** The path of the link a reply hands out. */
+    private static string LinkPath(string reply)
+    {
+        var m = Regex.Match(reply, @"^Download \(1 hour\): https://tools\.test(/mcp/files/[0-9a-f]{32}/[^ ]+) ");
+        Assert.True(m.Success, reply);
+        return m.Groups[1].Value;
+    }
+
+    [Fact]
+    public async Task ABuiltKitComesBackAsALink()
+    {
+        var http = await Start(new FakeToolsApi());
+        var reply = await Reply(await http.SendAsync(Call("build_kit", Mills, _realm.Token())));
+        Assert.EndsWith("/Mills.mKit - 1 components and 0 custom tools. Import it into ENCY's tool library.", reply);
+        Assert.StartsWith("/mcp/files/", LinkPath(reply));
+    }
+
+    /** A person's browser or messenger sends no token: the link alone opens the file, for an hour. */
+    [Fact]
+    public async Task ALinkOpensWithoutATokenForAnHour()
+    {
+        var http = await Start(new FakeToolsApi());
+        var path = LinkPath(await Reply(await http.SendAsync(Call("build_kit", Mills, _realm.Token()))));
+        var resp = await http.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal(new byte[] { 1, 2, 3 }, await resp.Content.ReadAsByteArrayAsync());
+        Assert.Equal("attachment", resp.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Equal("Mills.mKit", resp.Content.Headers.ContentDisposition?.FileNameStar);
+        Assert.True(resp.Headers.CacheControl?.NoStore);
+    }
+
+    [Fact]
+    public async Task AnUnknownOrExpiredLinkIs404()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var http = await Start(new FakeToolsApi(), dir => new DownloadStore(dir, () => now));
+        var path = LinkPath(await Reply(await http.SendAsync(Call("build_kit", Mills, _realm.Token()))));
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync(path)).StatusCode);
+
+        foreach (var unknown in new[] { "/mcp/files/0123456789abcdef0123456789abcdef/Mills.mKit", "/mcp/files/not-an-id/Mills.mKit" })
+        {
+            var resp = await http.GetAsync(unknown);
+            Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+            Assert.Empty(await resp.Content.ReadAsByteArrayAsync());
+        }
+
+        now += TimeSpan.FromMinutes(61);
+        Assert.Equal(HttpStatusCode.NotFound, (await http.GetAsync(path)).StatusCode);
+    }
+
+    /** The server never writes where an agent points - and says so before the site builds or counts anything. */
+    [Fact]
+    public async Task AFolderIsRefusedOnTheHostedServer()
+    {
+        var api = new FakeToolsApi();
+        var http = await Start(api);
+        var reply = await Reply(await http.SendAsync(Call("build_kit",
+            new { name = "Mills", componentIds = new[] { TestIds.G("c1") }, folder = "/etc" }, _realm.Token())));
+        Assert.Equal("ERROR: this server cannot save into a folder - leave folder out, and a link comes back", reply);
+        Assert.False(api.Called(nameof(api.BuildKit)));
+        Assert.Empty(Kept());
     }
 
     // ------------------------------------------------------------------ the settings

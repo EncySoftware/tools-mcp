@@ -16,9 +16,12 @@ public record CustomToolInput(
 
 /// <summary>Kits built on tools.encycam.com and saved to the person's disk as .mKit files.</summary>
 [McpServerToolType]
-public class BuildTools(IToolsApi api, TokenProvider tokens)
+public class BuildTools(IToolsApi api, TokenProvider tokens, IFileSink? files = null)
 {
     internal const string ImportHint = "Import it into ENCY's tool library.";
+
+    /** Where a saved file goes: the person's disk at home, a link on the hosted server. */
+    private readonly IFileSink _files = files ?? LocalFiles.Instance;
 
     [McpServerTool(Name = "build_kit"), Description(
         "Builds the chosen components, plus any custom drills and end mills, into one .mKit for ENCY 3 and saves it to " +
@@ -32,13 +35,14 @@ public class BuildTools(IToolsApi api, TokenProvider tokens)
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
+            _files.Check(folder);
             string? shape = SocketShape(socketShape);
             if (SocketShapeError(shape) is { } refused) return refused;
             var (ids, bad) = Ids.All(componentIds);
             if (bad != null) return Ids.NotAComponent(bad);
             var custom = (customTools ?? []).Select(t => t.ToCustomTool()).ToList();
             var file = await api.BuildKit(name, ids, custom, shape, token);
-            return $"Saved: {SavedFiles.Save(file, folder)} - {ids.Count} components and {custom.Count} custom tools. "
+            return $"{_files.Deliver(file, folder)} - {ids.Count} components and {custom.Count} custom tools. "
                    + ImportHint;
         });
 
@@ -54,8 +58,9 @@ public class BuildTools(IToolsApi api, TokenProvider tokens)
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
+            _files.Check(folder);
             var file = await api.BuildCustomTool(new CustomTool(family, diameterMm, lengthMm, shankDiameterMm, name), token);
-            return $"Saved: {SavedFiles.Save(file, folder)}. " + ImportHint;
+            return $"{_files.Deliver(file, folder)}. " + ImportHint;
         });
 
     /**
