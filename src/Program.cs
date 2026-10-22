@@ -18,7 +18,8 @@ builder.Services.AddSingleton<TokenProvider>();
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithTools<CatalogueTools>();
+    .WithTools<CatalogueTools>()
+    .WithTools<SearchTools>();
 
 await builder.Build().RunAsync();
 return 0;
