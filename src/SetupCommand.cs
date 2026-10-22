@@ -1,0 +1,110 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+namespace ToolsMcp;
+
+/**
+ * `tools-mcp setup` wires this server into the person's editor and signs them in, so getting started is two commands
+ * (install, setup) instead of hand-editing JSON and remembering `login`.
+ *
+ * Cursor's config is shared with every other MCP server the person uses, so the file is merged, never rewritten.
+ * Claude Code is registered through its own CLI when that CLI is present, and Codex through its config.toml when
+ * Codex is on the machine ({@link CodexConfig}). The same as dmc-mcp's setup, which these were taken from.
+ */
+public static class SetupCommand
+{
+    public const string ServerName = Brand.McpServerName;
+    public const string Command = Brand.Cli;
+
+    public static string DefaultCursorConfigPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cursor", "mcp.json");
+
+    public static async Task<int> Run(string cursorConfigPath, string codexHome, IProcessRunner proc,
+                                     Func<bool> hasLogin, Func<Task<int>> login,
+                                     bool noLogin, Action<string> write)
+    {
+        // ---- Cursor
+        JsonObject root;
+        if (File.Exists(cursorConfigPath))
+        {
+            try
+            {
+                root = JsonNode.Parse(File.ReadAllText(cursorConfigPath)) as JsonObject
+                       ?? throw new JsonException("not a JSON object");
+            }
+            catch (JsonException e)
+            {
+                write($"{cursorConfigPath} is not valid JSON ({e.Message}). Fix or delete it and run setup again - "
+                      + "it was left untouched.");
+                return 1;
+            }
+        }
+        else
+        {
+            root = new JsonObject();
+        }
+
+        if (root["mcpServers"] is not JsonObject servers)
+        {
+            servers = new JsonObject();
+            root["mcpServers"] = servers;
+        }
+
+        bool already = servers[ServerName] is JsonObject cur && (string?)cur["command"] == Command;
+        if (already)
+        {
+            write($"Cursor: {ServerName} is already configured in {cursorConfigPath}");
+        }
+        else
+        {
+            servers[ServerName] = new JsonObject { ["command"] = Command };
+            Directory.CreateDirectory(Path.GetDirectoryName(cursorConfigPath)!);
+            File.WriteAllText(cursorConfigPath, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            write($"Cursor: {ServerName} added to {cursorConfigPath}");
+        }
+
+        // ---- Claude Code (optional; its CLI owns its own config)
+        var version = await proc.Run("claude", "--version");
+        if (version.Ok)
+        {
+            // --scope user: without it Claude Code remembers the server only for the folder setup ran in
+            // (found in dmc-mcp, 2026-09-16).
+            var add = await proc.Run("claude", $"mcp add --scope user {ServerName} -- {Command}");
+            write(add.Ok
+                ? $"Claude Code: {ServerName} registered"
+                : $"Claude Code: could not register ({add.StdErr.Trim()}) - add it manually with "
+                  + $"`claude mcp add --scope user {ServerName} -- {Command}`");
+        }
+
+        // ---- Codex (optional): only when it is on the machine - its folder, or its CLI on PATH
+        if (Directory.Exists(codexHome) || (await proc.Run("codex", "--version")).Ok)
+        {
+            string codexConfig = CodexConfig.ConfigPath(codexHome);
+            try
+            {
+                write(CodexConfig.Ensure(codexHome, ServerName, Command)
+                    ? $"Codex: {ServerName} added to {codexConfig}"
+                    : $"Codex: {ServerName} is already configured in {codexConfig}");
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                write($"Codex: could not write {codexConfig} ({e.Message}) - add it manually with "
+                      + $"`codex mcp add {ServerName} -- {Command}`");
+            }
+        }
+
+        // ---- sign-in: setup is the one moment the person is at a terminal
+        if (!noLogin && !hasLogin())
+        {
+            write("");
+            write("One more thing: sign in to tools.encycam.com with the same account as the site (in the browser; "
+                  + "the password is not stored).");
+            int code = await login();
+            if (code != 0) return code;
+        }
+
+        write("");
+        write("Done - restart your editor so it picks the server up, then ask it to find a tool.");
+        return 0;
+    }
+}
