@@ -93,6 +93,13 @@ public class ToolsApi : IToolsApi
     private readonly HttpClient _http;
     private readonly string _api;
 
+    /**
+     * The largest file a download may be; null for no limit (at home the disk decides). The hosted server sets
+     * DownloadStore.MaxFile: there a file is held in memory on its way to a link, in a 512 MB container, and it used to
+     * be held twice and only then measured (final review, 2026-10-22).
+     */
+    public long? MaxFile { get; init; }
+
     public ToolsApi() : this(new HttpClient { Timeout = TimeSpan.FromSeconds(60) },
         Environment.GetEnvironmentVariable("TOOLS_API") is { Length: > 0 } api ? api : Brand.Api)
     {
@@ -120,7 +127,7 @@ public class ToolsApi : IToolsApi
         (await Get<Downloads>("/downloads", token)).ByKit ?? new Dictionary<string, long>();
 
     public async Task<DownloadedFile> DownloadKit(string slug, string token) =>
-        await FileOf(await Send(HttpMethod.Get, "/kits/" + Esc(slug) + "/download", token), slug);
+        await FileOf(await SendForFile(HttpMethod.Get, "/kits/" + Esc(slug) + "/download", token), slug);
 
     public Task<ComponentsPage> FindComponents(ComponentQuery query, string token) =>
         Get<ComponentsPage>("/components" + Filters(query, paging: true), token);
@@ -169,17 +176,21 @@ public class ToolsApi : IToolsApi
             ComponentFileKind.Drawing => "drawing",
             _ => "picture",
         };
-        var response = await Send(HttpMethod.Get, "/components/" + Esc(id) + "/" + part, token);
-        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        var response = await SendForFile(HttpMethod.Get, "/components/" + Esc(id) + "/" + part, token);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            response.Dispose();
+            return null;
+        }
         return await FileOf(response, "");
     }
 
     public async Task<DownloadedFile> BuildKit(string name, IReadOnlyList<string> ids, IReadOnlyList<CustomTool> custom,
                                               string? sockets, string token) =>
-        await FileOf(await Send(HttpMethod.Post, "/pull", token, new { name, ids, sockets, custom }), name + ".mKit");
+        await FileOf(await SendForFile(HttpMethod.Post, "/pull", token, new { name, ids, sockets, custom }), name + ".mKit");
 
     public async Task<DownloadedFile> BuildCustomTool(CustomTool spec, string token) =>
-        await FileOf(await Send(HttpMethod.Post, "/custom-tool", token, spec), (spec.Name ?? "Custom tool") + ".mKit");
+        await FileOf(await SendForFile(HttpMethod.Post, "/custom-tool", token, spec), (spec.Name ?? "Custom tool") + ".mKit");
 
     public Task<IReadOnlyList<LibrarySummary>> ListLibraries(string token) =>
         Get<IReadOnlyList<LibrarySummary>>("/me/libraries", token);
@@ -202,16 +213,24 @@ public class ToolsApi : IToolsApi
         await EnsureOk(await Send(HttpMethod.Delete, "/me/libraries/" + Esc(id), token));
 
     public async Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token) =>
-        await FileOf(await Send(HttpMethod.Post, "/me/libraries/" + Esc(id) + "/pull", token, new { sockets }), "Library.mKit");
+        await FileOf(await SendForFile(HttpMethod.Post, "/me/libraries/" + Esc(id) + "/pull", token, new { sockets }), "Library.mKit");
 
     // ------------------------------------------------------------------ plumbing
 
-    private async Task<HttpResponseMessage> Send(HttpMethod method, string path, string token, object? body = null)
+    private Task<HttpResponseMessage> Send(HttpMethod method, string path, string token, object? body = null) =>
+        Send(method, path, token, body, HttpCompletionOption.ResponseContentRead);
+
+    /** A request whose answer is a file: its body is left unread, for FileOf to measure before it reads it. */
+    private Task<HttpResponseMessage> SendForFile(HttpMethod method, string path, string token, object? body = null) =>
+        Send(method, path, token, body, HttpCompletionOption.ResponseHeadersRead);
+
+    private async Task<HttpResponseMessage> Send(HttpMethod method, string path, string token, object? body,
+                                                 HttpCompletionOption completion)
     {
         var request = new HttpRequestMessage(method, _api + path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (body != null) request.Content = JsonContent.Create(body, body.GetType(), options: Json);
-        return await _http.SendAsync(request);
+        return await _http.SendAsync(request, completion);
     }
 
     private async Task<T> Send<T>(HttpMethod method, string path, string token, object body)
@@ -246,13 +265,41 @@ public class ToolsApi : IToolsApi
      * The file and the name the server gave it. filename* (RFC 5987, UTF-8) comes first: a library named in Cyrillic
      * arrives that way. A plain filename comes next, then the caller's fallback.
      */
-    private static async Task<DownloadedFile> FileOf(HttpResponseMessage response, string fallback)
+    private async Task<DownloadedFile> FileOf(HttpResponseMessage response, string fallback)
     {
-        await EnsureOk(response);
-        var disposition = response.Content.Headers.ContentDisposition;
-        string? name = disposition?.FileNameStar ?? disposition?.FileName?.Trim('"');
-        return new DownloadedFile(string.IsNullOrWhiteSpace(name) ? fallback : name,
-            await response.Content.ReadAsByteArrayAsync());
+        using (response)
+        {
+            await EnsureOk(response);
+            var disposition = response.Content.Headers.ContentDisposition;
+            string? name = disposition?.FileNameStar ?? disposition?.FileName?.Trim('"');
+            return new DownloadedFile(string.IsNullOrWhiteSpace(name) ? fallback : name, await BodyOf(response.Content));
+        }
+    }
+
+    /**
+     * The body in one array, sized by its Content-Length where the server gives one, and never past MaxFile: a file over
+     * it is refused by its length before its body is read, and one that names no length (chunked) as soon as it passes.
+     */
+    private async Task<byte[]> BodyOf(HttpContent content)
+    {
+        long? length = content.Headers.ContentLength;
+        if (MaxFile is { } max && length > max) throw DownloadStore.TooLarge(max);
+        await using var stream = await content.ReadAsStreamAsync();
+        if (length is { } exact)
+        {
+            var bytes = new byte[exact];
+            await stream.ReadExactlyAsync(bytes);
+            return bytes;
+        }
+        using var read = new MemoryStream();
+        var chunk = new byte[81920];
+        int n;
+        while ((n = await stream.ReadAsync(chunk)) > 0)
+        {
+            if (MaxFile is { } cap && read.Length + n > cap) throw DownloadStore.TooLarge(cap);
+            read.Write(chunk, 0, n);
+        }
+        return read.ToArray();
     }
 
     private static string Esc(string segment) => Uri.EscapeDataString(segment);

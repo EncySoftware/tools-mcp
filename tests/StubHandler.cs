@@ -25,6 +25,13 @@ internal sealed class StubHandler : HttpMessageHandler
 
     public StubHandler OnJson(string method, string path, string json) => On(method, path, HttpStatusCode.OK, json);
 
+    /** An answer whose body the test makes: one that claims a length, or one that names none, as a chunked one does. */
+    public StubHandler OnContent(string method, string path, Func<HttpContent> content)
+    {
+        _answers[method + " " + path] = () => new HttpResponseMessage(HttpStatusCode.OK) { Content = content() };
+        return this;
+    }
+
     public static ToolsApi Api(StubHandler handler) => new(new HttpClient(handler), "https://tools.test/api");
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)

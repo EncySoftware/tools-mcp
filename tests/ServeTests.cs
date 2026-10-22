@@ -266,7 +266,7 @@ public class ServeTests : IAsyncLifetime
     /** The path of the link a reply hands out. */
     private static string LinkPath(string reply)
     {
-        var m = Regex.Match(reply, @"^Download \(1 hour\): https://tools\.test(/mcp/files/[0-9a-f]{32}/[^ ]+) ");
+        var m = Regex.Match(reply, @"^Download \(1 hour\): https://tools\.test(/mcp/files/[0-9a-f]{32}/[^ ]+)( |$)");
         Assert.True(m.Success, reply);
         return m.Groups[1].Value;
     }
@@ -326,6 +326,66 @@ public class ServeTests : IAsyncLifetime
         Assert.Empty(Kept());
     }
 
+    /** The site's file is held in memory on its way to a link: the hosted server caps it at what the store keeps. */
+    [Fact]
+    public void TheHostedServerCapsWhatItDownloads()
+    {
+        var app = ServeCommand.Build(new[] { "--urls", "http://127.0.0.1:0" }, Settings(), s => s.AddSingleton(new IssuerKeys(TestIssuer.Issuer, _realm)));
+        _apps.Add(app);
+        Assert.Equal(DownloadStore.MaxFile, Assert.IsType<ToolsApi>(app.Services.GetRequiredService<IToolsApi>()).MaxFile);
+    }
+
+    /** With their share already full, a person learns so before the site builds anything for them. */
+    [Fact]
+    public async Task APersonWithAFullShareIsRefusedBeforeTheSiteBuilds()
+    {
+        var api = new FakeToolsApi();
+        var http = await Start(api, dir => new DownloadStore(dir, null, 10, 3, 100)); // the fake's kit is 3 bytes
+        var anna = _realm.Token();
+        LinkPath(await Reply(await http.SendAsync(Call("build_kit", Mills, anna))));
+
+        Assert.Equal("ERROR: your links hold 3 bytes - wait for older ones to expire (1 hour)",
+            await Reply(await http.SendAsync(Call("build_kit", Mills, anna))));
+        Assert.Single(api.Calls, c => c.Method == nameof(api.BuildKit));
+    }
+
+    /** Every tool that hands out a file, with and without a folder: a link, or the refusal - never a write to a disk. */
+    [Theory]
+    [InlineData("download_kit")]
+    [InlineData("build_kit")]
+    [InlineData("build_custom_tool")]
+    [InlineData("export_library")]
+    [InlineData("save_component_file")]
+    public async Task EveryFileToolHandsOutALinkAndRefusesAFolder(string tool)
+    {
+        var api = new FakeToolsApi();
+        var library = TestIds.G("lib1");
+        api.KitDetails["mills"] = new KitDetail("mills", "Mills", "Category", "MIXED", 3, "mkit", "About it.", 2, [], []);
+        api.KitFiles["mills"] = new DownloadedFile("Mills.mKit", [1, 2]);
+        api.Libraries[library] = new Library(library, "Kept", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, []);
+        api.Components[TestIds.G("c1")] = new ComponentDetail(new Component(TestIds.G("c1"), "C6-DCLNL", "External turning tool",
+            "TRNGEI", null, 150, "sandvik-gtc", "Sandvik Coromant catalogue", 3, true, true, false, null, true, "Sandvik Coromant"), null);
+        api.ComponentFiles[(TestIds.G("c1"), ComponentFileKind.Model)] = new DownloadedFile("", [7]);
+        var args = new Dictionary<string, object>
+        {
+            ["download_kit"] = new { slug = "mills" },
+            ["build_kit"] = new { name = "Mills", componentIds = new[] { TestIds.G("c1") } },
+            ["build_custom_tool"] = new { family = "drill", diameterMm = 7.5, lengthMm = 80.0 },
+            ["export_library"] = new { id = library },
+            ["save_component_file"] = new { id = TestIds.G("c1"), kind = "model" },
+        };
+        var http = await Start(api);
+
+        var linked = await Reply(await http.SendAsync(Call(tool, args[tool], _realm.Token())));
+        Assert.StartsWith("/mcp/files/", LinkPath(linked));
+
+        var withFolder = JsonSerializer.SerializeToNode(args[tool])!.AsObject();
+        withFolder["folder"] = "/tmp";
+        Assert.Equal("ERROR: this server cannot save into a folder - leave folder out, and a link comes back",
+            await Reply(await http.SendAsync(Call(tool, withFolder, _realm.Token()))));
+        Assert.Single(Directory.GetDirectories(_lastFiles)); // the first call's link, nothing more
+    }
+
     // ------------------------------------------------------------------ the call line
 
     /** The lines that name a call of the tool. */
@@ -355,6 +415,25 @@ public class ServeTests : IAsyncLifetime
         var line = Assert.Single(CallLines("whoami"));
         foreach (var secret in new[] { anna, anna.Split('.')[^1], "anna@example.com", "sub-anna" })
             Assert.DoesNotContain(secret, line);
+    }
+
+    /**
+     * A tool's name is the agent's text too: one that names no tool is answered without being written down, and the
+     * SDK's own error line, which would quote it, never comes (final review, 2026-10-22).
+     */
+    [Fact]
+    public async Task AToolNameCannotForgeALogLine()
+    {
+        var api = new FakeToolsApi();
+        var http = await Start(api);
+        var resp = await http.SendAsync(Call("whoami\nInformation ToolsMcp.Calls: Call delete_library by 000000000000", new { }, _realm.Token()));
+
+        var answer = await Answer(resp);
+        Assert.True(answer.GetProperty("result").GetProperty("isError").GetBoolean());
+        Assert.Equal("ERROR: no such tool", answer.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString());
+        Assert.DoesNotContain(_logs.Lines, l => l.Contains("delete_library"));
+        Assert.DoesNotContain(_logs.Lines, l => l.StartsWith("Error"));
+        Assert.Empty(api.Calls);
     }
 
     /** An argument is the agent's text: it cannot start a line of its own in the log. */

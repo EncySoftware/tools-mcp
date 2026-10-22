@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -5,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Authentication;
+using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 
 namespace ToolsMcp;
 
@@ -79,6 +82,14 @@ public static class ServeCommand
         }
     }
 
+    /** The tools this server has, by name: what a call may name. The same five classes Build registers. */
+    internal static readonly HashSet<string> ToolNames = new[]
+        { typeof(CatalogueTools), typeof(SearchTools), typeof(ComponentTools), typeof(BuildTools), typeof(LibraryTools) }
+        .SelectMany(t => t.GetMethods())
+        .Select(m => m.GetCustomAttribute<McpServerToolAttribute>()?.Name)
+        .OfType<string>()
+        .ToHashSet(StringComparer.Ordinal);
+
     /** What a call's line names of its arguments: where in the catalogues it looks, never what a person searches for. */
     private static readonly string[] LoggedArguments = ["kit", "classCode", "page", "pageSize"];
 
@@ -115,8 +126,12 @@ public static class ServeCommand
         ILogger? calls = null;
         // A token travels in a header: keep ASP.NET from logging requests.
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+        // The SDK writes a line for every call, with the tool's name as the agent sent it - text that can forge a line of
+        // its own (final review, 2026-10-22). The call line below is the record of a call.
+        builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Warning);
 
-        builder.Services.AddSingleton<IToolsApi, ToolsApi>();
+        // what the site sends is held in memory on its way to a link: never more than the store keeps
+        builder.Services.AddSingleton<IToolsApi>(new ToolsApi { MaxFile = DownloadStore.MaxFile });
         builder.Services.AddSingleton<TokenProvider, CallerTokens>();
         builder.Services.AddSingleton(new DownloadStore(Path.Combine(settings.DataDir, "files")));
         builder.Services.AddSingleton<IFileSink>(sp => new LinkFiles(sp.GetRequiredService<DownloadStore>(), settings.PublicUrl));
@@ -137,8 +152,11 @@ public static class ServeCommand
             .WithTools<LibraryTools>()
             .WithRequestFilters(f => f.AddCallToolFilter(next => async (request, ct) =>
             {
-                calls?.LogInformation("Call {Tool} by {Who} {Args}",
-                    request.Params?.Name, Who(Caller.Current), Where(request.Params?.Arguments));
+                // A name is the agent's text: one that names no tool is answered here, unwritten - the SDK's own
+                // error line would quote it whole (final review, 2026-10-22).
+                if (request.Params?.Name is not { } tool || !ToolNames.Contains(tool))
+                    return new CallToolResult { IsError = true, Content = [new TextContentBlock { Text = "ERROR: no such tool" }] };
+                calls?.LogInformation("Call {Tool} by {Who} {Args}", tool, Who(Caller.Current), Where(request.Params.Arguments));
                 return await next(request, ct);
             }));
 

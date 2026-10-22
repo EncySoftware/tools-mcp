@@ -127,7 +127,7 @@ tools server it answers at **`https://tools.encycam.com/mcp`**.
 
 - **Every call is a person's.** It carries `Authorization: Bearer <access token>` of the person the agent works for: a
   `licsys` access token (not the ID or the refresh token) minted for a client named in `TOOLS_MCP_CLIENTS` (its `azp`)
-  or for an audience named in `TOOLS_MCP_AUDIENCE`. The call runs with that token, so it sees that person's supplier
+  or for an audience named in `TOOLS_MCP_AUDIENCE` (with both set, a token must match both). The call runs with that token, so it sees that person's supplier
   catalogues and libraries. There is no key and no account of the server's own.
 - A refused token gets `401` with `error="invalid_token"`: refresh it and repeat the request. `503` means Keycloak could
   not be reached to check it: try again in a minute. MCP clients that discover the sign-in themselves (RFC 9728) find

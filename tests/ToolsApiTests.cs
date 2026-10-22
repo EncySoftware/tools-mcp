@@ -58,6 +58,116 @@ public class ToolsApiTests
         Assert.Equal(401, e.Status);
     }
 
+    // ------------------------------------------------------------------ a file's size on the hosted server
+
+    private const long MB = 1024 * 1024;
+
+    /**
+     * The hosted server holds a file in memory before it keeps it, in a 512 MB container: each file used to be held twice,
+     * and only then measured (final review, 2026-10-22). One over the limit is refused by its length, unread.
+     */
+    [Fact]
+    public async Task AFileOverTheCapIsRefusedBeforeItsBodyIsRead()
+    {
+        var body = new Unread(MB + 1);
+        var stub = new StubHandler().OnContent("POST", "/api/pull", () => body);
+        var api = new ToolsApi(new HttpClient(stub), "https://tools.test/api") { MaxFile = MB };
+
+        var e = await Assert.ThrowsAsync<DownloadStore.FullException>(() => api.BuildKit("Mills", ["c1"], [], null, "t"));
+
+        Assert.Equal("a file holds at most 1 MB", e.Message);
+        Assert.False(body.WasRead);
+    }
+
+    /** A chunked answer names no length: it is read up to the cap and no further. */
+    [Fact]
+    public async Task AFileWithoutALengthStopsAtTheCap()
+    {
+        var body = new Unsized(10 * MB);
+        var stub = new StubHandler().OnContent("POST", "/api/pull", () => body);
+        var api = new ToolsApi(new HttpClient(stub), "https://tools.test/api") { MaxFile = MB };
+
+        var e = await Assert.ThrowsAsync<DownloadStore.FullException>(() => api.BuildKit("Mills", ["c1"], [], null, "t"));
+
+        Assert.Equal("a file holds at most 1 MB", e.Message);
+        Assert.True(body.Given <= MB + 128 * 1024, $"read {body.Given} bytes");
+    }
+
+    [Fact]
+    public async Task AFileWithinTheCapComesWhole()
+    {
+        var stub = new StubHandler()
+            .OnContent("POST", "/api/pull", () => new ByteArrayContent(Enumerable.Range(0, 1000).Select(i => (byte)i).ToArray()))
+            .OnContent("GET", "/api/kits/mills/download", () => new Unsized(3000));
+        var api = new ToolsApi(new HttpClient(stub), "https://tools.test/api") { MaxFile = MB };
+
+        Assert.Equal(Enumerable.Range(0, 1000).Select(i => (byte)i), (await api.BuildKit("Mills", ["c1"], [], null, "t")).Bytes);
+        Assert.Equal(3000, (await api.DownloadKit("mills", "t")).Bytes.Length);
+    }
+
+    /** A body that says how long it is and must not be read. */
+    private sealed class Unread(long length) : HttpContent
+    {
+        public bool WasRead { get; private set; }
+
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context)
+        {
+            WasRead = true;
+            throw new InvalidOperationException("the body was read");
+        }
+
+        protected override Task<Stream> CreateContentReadStreamAsync()
+        {
+            WasRead = true;
+            throw new InvalidOperationException("the body was read");
+        }
+
+        protected override bool TryComputeLength(out long size)
+        {
+            size = length;
+            return true;
+        }
+    }
+
+    /** A body of zeros that names no length, handed out as it is read and counted. */
+    private sealed class Unsized(long size) : HttpContent
+    {
+        private readonly Zeros _stream = new(size);
+        public long Given => _stream.Given;
+
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context) =>
+            _stream.CopyToAsync(stream);
+
+        protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(_stream);
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
+    private sealed class Zeros(long size) : Stream
+    {
+        public long Given { get; private set; }
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var n = (int)Math.Min(count, size - Given);
+            Array.Clear(buffer, offset, n);
+            Given += n;
+            return n;
+        }
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => Given; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     /** A library named in Cyrillic comes back as filename*=UTF-8''… and is saved under that name, not its escapes. */
     [Fact]
     public async Task AFileKeepsTheNameTheServerGaveIt()

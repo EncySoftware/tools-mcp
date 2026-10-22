@@ -38,19 +38,39 @@ public sealed class DownloadStore
     /** The store's refusal, in words for the person: which limit, and what to do. */
     public sealed class FullException(string message) : Exception(message);
 
-    /** Keeps the file for an hour as owner's ("user:" and a hash) and returns its id. Nothing is left of a refused or failed one. */
-    public string Keep(DownloadedFile file, string owner)
+    /** A file over the limit, refused in the same words wherever it is measured (ToolsApi, before reading it). */
+    public static FullException TooLarge(long maxFile) => new($"a file holds at most {Mb(maxFile)}");
+
+    /**
+     * Throws when the person's share, or the server's space, is full already: asked before the site builds a file
+     * that could not be kept (final review, 2026-10-22).
+     */
+    public void EnsureRoom(string owner)
     {
-        long size = file.Bytes.LongLength;
-        if (size > _maxFile) throw new FullException($"a file holds at most {Mb(_maxFile)}");
         lock (_gate)
         {
             Purge();
             var live = Live();
-            if (live.Where(f => f.Owner == owner).Sum(f => f.Size) + size > _maxPerPerson)
-                throw new FullException($"your links hold {Mb(_maxPerPerson)} - wait for older ones to expire (1 hour)");
-            if (live.Sum(f => f.Size) + size > _maxTotal)
-                throw new FullException("the server's file space is full - try again later");
+            if (live.Where(f => f.Owner == owner).Sum(f => f.Size) >= _maxPerPerson) throw ShareFull();
+            if (live.Sum(f => f.Size) >= _maxTotal) throw ServerFull();
+        }
+    }
+
+    private FullException ShareFull() => new($"your links hold {Mb(_maxPerPerson)} - wait for older ones to expire (1 hour)");
+
+    private static FullException ServerFull() => new("the server's file space is full - try again later");
+
+    /** Keeps the file for an hour as owner's ("user:" and a hash) and returns its id. Nothing is left of a refused or failed one. */
+    public string Keep(DownloadedFile file, string owner)
+    {
+        long size = file.Bytes.LongLength;
+        if (size > _maxFile) throw TooLarge(_maxFile);
+        lock (_gate)
+        {
+            Purge();
+            var live = Live();
+            if (live.Where(f => f.Owner == owner).Sum(f => f.Size) + size > _maxPerPerson) throw ShareFull();
+            if (live.Sum(f => f.Size) + size > _maxTotal) throw ServerFull();
 
             var id = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
             var dir = Path.Combine(_root, id);
@@ -139,5 +159,6 @@ public sealed class DownloadStore
 
     internal static bool IsId(string id) => id.Length == 32 && id.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 
-    private static string Mb(long bytes) => bytes / MB + " MB";
+    /** "100 MB"; a limit that is no whole number of megabytes (the tests' small ones) in bytes. */
+    private static string Mb(long bytes) => bytes % MB == 0 ? bytes / MB + " MB" : bytes + " bytes";
 }

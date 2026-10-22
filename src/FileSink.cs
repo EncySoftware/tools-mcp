@@ -33,6 +33,8 @@ public sealed class LinkFiles(DownloadStore store, string publicUrl) : IFileSink
         // The server never writes where an agent points.
         if (!string.IsNullOrWhiteSpace(folder))
             throw new ArgumentException("this server cannot save into a folder - leave folder out, and a link comes back");
+        // and a person whose share is full hears it before the site builds a file that could not be kept
+        if (Caller.Current?.Owner is { } owner) store.EnsureRoom(owner);
     }
 
     public string Deliver(DownloadedFile file, string? folder)
