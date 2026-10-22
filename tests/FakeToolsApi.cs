@@ -18,13 +18,13 @@ internal sealed class FakeToolsApi : IToolsApi
     }
 
     // ------------------------------------------------------------------ account and kits
-    public Caller Me { get; set; } = new("sub-alice", "alice", "alice@example.com");
+    public Account Me { get; set; } = new("sub-alice", "alice", "alice@example.com");
     public List<KitSummary> Kits { get; } = new();
     public Dictionary<string, KitDetail> KitDetails { get; } = new();
     public Dictionary<string, long> Downloads { get; } = new();
     public Dictionary<string, DownloadedFile> KitFiles { get; } = new();
 
-    public Task<Caller> GetMe(string token) { Saw(nameof(GetMe), token); return Task.FromResult(Me); }
+    public Task<Account> GetMe(string token) { Saw(nameof(GetMe), token); return Task.FromResult(Me); }
 
     public Task<IReadOnlyList<KitSummary>> ListKits(string? query, string? discipline, int? encyVersion, string token)
     {

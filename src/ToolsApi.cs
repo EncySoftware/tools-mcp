@@ -15,7 +15,8 @@ public class ToolsHttpException(int status, string body) : Exception($"{status} 
     public string Body { get; } = body;
 }
 
-public record Caller(string Sub, string? Username, string? Email);
+/// <summary>Who /me says the token belongs to.</summary>
+public record Account(string Sub, string? Username, string? Email);
 public record SectionCount(string Section, long Count, string? Title, bool Icon, string? Hint);
 public record KitSummary(string Slug, string Name, string? Category, string Discipline, int EncyVersion, string Format,
     string? Maker, int ItemsTotal, int? PullableTotal, IReadOnlyList<SectionCount>? Sections);
@@ -56,7 +57,7 @@ public record ComponentQuery(string? Query = null, string? Kit = null, string? C
 public interface IToolsApi
 {
     string Site { get; }
-    Task<Caller> GetMe(string token);
+    Task<Account> GetMe(string token);
     Task<IReadOnlyList<KitSummary>> ListKits(string? query, string? discipline, int? encyVersion, string token);
     Task<KitDetail?> GetKit(string slug, string token);
     Task<IReadOnlyDictionary<string, long>> GetDownloads(string token);
@@ -106,7 +107,7 @@ public class ToolsApi : IToolsApi
     /** The site beside the API, so a TOOLS_API pointed at another server links to that server's pages. */
     public string Site => _api.EndsWith("/api", StringComparison.Ordinal) ? _api[..^"/api".Length] : Brand.Site;
 
-    public Task<Caller> GetMe(string token) => Get<Caller>("/me", token);
+    public Task<Account> GetMe(string token) => Get<Account>("/me", token);
 
     public Task<IReadOnlyList<KitSummary>> ListKits(string? query, string? discipline, int? encyVersion, string token) =>
         Get<IReadOnlyList<KitSummary>>("/kits" + Params(("q", query), ("discipline", discipline), ("ency", encyVersion)), token);
