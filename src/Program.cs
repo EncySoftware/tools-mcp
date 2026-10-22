@@ -19,7 +19,8 @@ builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithTools<CatalogueTools>()
-    .WithTools<SearchTools>();
+    .WithTools<SearchTools>()
+    .WithTools<ComponentTools>();
 
 await builder.Build().RunAsync();
 return 0;
