@@ -1,0 +1,4 @@
+# What runs on the Linux server stays LF in every checkout: a CR at a line's end breaks sh, and core.autocrlf on
+# Windows would add one to update.sh copied from a working copy (2026-10-22).
+Dockerfile text eol=lf
+deploy/** text eol=lf
