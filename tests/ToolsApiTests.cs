@@ -168,6 +168,20 @@ public class ToolsApiTests
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
+    [Fact]
+    public async Task TheSpindleGoesToTheSiteByName()
+    {
+        var stub = new StubHandler().OnJson("GET", "/api/components/c1/assembly",
+            """{"steps":[],"reachesSpindle":true,"stoppedBecause":"mounts in a Capto C6 spindle"}""");
+
+        var chain = await StubHandler.Api(stub).GetAssembly("c1", "Capto C6", "t");
+
+        Assert.Equal("?spindle=Capto%20C6", stub.Requests[0].Uri.Query);
+        Assert.Equal("mounts in a Capto C6 spindle", chain!.StoppedBecause);
+        await StubHandler.Api(stub).GetAssembly("c1", null, "t");
+        Assert.Equal("", stub.Requests[1].Uri.Query);
+    }
+
     /** A library named in Cyrillic comes back as filename*=UTF-8''… and is saved under that name, not its escapes. */
     [Fact]
     public async Task AFileKeepsTheNameTheServerGaveIt()

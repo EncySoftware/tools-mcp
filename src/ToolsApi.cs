@@ -67,7 +67,8 @@ public interface IToolsApi
     Task<FilterValues> GetFilterValues(ComponentQuery query, string token);
     Task<ComponentDetail?> GetComponent(string id, string token);
     Task<Compat?> GetCompat(string id, string token);
-    Task<AssemblyChain?> GetAssembly(string id, string token);
+    /** spindle: the machine's, as ENCY's connection library names it (HSK63, SK40, Capto C6); null for any. */
+    Task<AssemblyChain?> GetAssembly(string id, string? spindle, string token);
     Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetAcceptsAmong(IReadOnlyList<string> ids, string token);
     Task<DownloadedFile?> GetComponentFile(string id, ComponentFileKind kind, string token);
     Task<DownloadedFile> BuildKit(string name, IReadOnlyList<string> ids, IReadOnlyList<CustomTool> custom, string? sockets, string token);
@@ -158,8 +159,8 @@ public class ToolsApi : IToolsApi
     public Task<Compat?> GetCompat(string id, string token) =>
         GetOrNull<Compat>("/components/" + Esc(id) + "/compat", token);
 
-    public Task<AssemblyChain?> GetAssembly(string id, string token) =>
-        GetOrNull<AssemblyChain>("/components/" + Esc(id) + "/assembly", token);
+    public Task<AssemblyChain?> GetAssembly(string id, string? spindle, string token) =>
+        GetOrNull<AssemblyChain>("/components/" + Esc(id) + "/assembly" + Params(("spindle", spindle)), token);
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetAcceptsAmong(IReadOnlyList<string> ids, string token)
     {

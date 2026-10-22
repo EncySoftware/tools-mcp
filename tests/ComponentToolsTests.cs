@@ -72,6 +72,21 @@ public class ComponentToolsTests : IDisposable
         Assert.Contains("Stopped: nothing in the catalogue holds that", reply);
     }
 
+    /** Groshev, 2026-10-22: the chain for the machine at hand - the spindle goes to the site, and the reply names it. */
+    [Fact]
+    public async Task AnAssemblyToTheSpindleAskedNamesIt()
+    {
+        _api.Assemblies[G("c3")] = new AssemblyChain([new AssemblyStep(Holder(G("h1"), "HSK63 ER16 chuck"), 2)], true,
+            "mounts in a HSK63 spindle");
+
+        string reply = await Tools().AssembleToSpindle(G("c3"), "HSK63");
+
+        Assert.Equal("HSK63", _api.LastSpindle);
+        Assert.EndsWith("Reaches the spindle: mounts in a HSK63 spindle.", reply);
+        await Tools().AssembleToSpindle(G("c3"), "  ");
+        Assert.Null(_api.LastSpindle);
+    }
+
     /** Names are looked up one by one, so the ids are capped: 51 would be 51 lookups for one answer. */
     [Fact]
     public async Task CheckFitNeedsTwoToFiftyIds()

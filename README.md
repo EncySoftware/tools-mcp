@@ -8,7 +8,7 @@ person's account, checks what fits what, and puts the tools into a library in th
 that library through the Tools catalogue extension. It is the tools.encycam.com counterpart of
 [dmc-mcp](https://github.com/EncySoftware/dmc-mcp).
 
-Status: 0.2.0. The hosted server for Hermes (`tools-mcp serve`) came with it.
+Status: 0.3.0. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
 
 | Tool | What it does |
 |---|---|
@@ -20,7 +20,7 @@ Status: 0.2.0. The hosted server for Hermes (`tools-mcp serve`) came with it.
 | `search_options` | The values the search filters can take for the current search: classes with codes, families, makers, coatings, coolant, shanks and the diameter range. |
 | `describe_component` | One component by id: every parameter its supplier publishes, its connection, and which files exist. |
 | `what_fits` | What a component goes into and what it takes, with totals. |
-| `assemble_to_spindle` | The chain up to the part that mounts in the machine, with the number of other choices at each step, or why it stopped. |
+| `assemble_to_spindle` | The chain up to the part that mounts in the machine, with the number of other choices at each step, or why it stopped. Given the machine's spindle (HSK63, SK40, BT40, Capto C6...), the shortest chain that ends on it. |
 | `check_fit` | Which of 2 to 50 hand-picked components takes which, checked before they are built. |
 | `save_component_file` | Saves the supplier's STEP model, drawing or photo, named after the component. |
 | `build_kit` | Builds the chosen components plus custom drills and end mills into one `.mKit` and saves it. Up to 500. |

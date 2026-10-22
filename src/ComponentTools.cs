@@ -71,12 +71,16 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
 
     [McpServerTool(Name = "assemble_to_spindle"), Description(
         "The chain above a component up to the part that mounts in the machine: what holds it, what holds that, " +
-        "with how many other choices each step had - or why the chain stopped.")]
-    public Task<string> AssembleToSpindle([Description("The component's id, e.g. a cutter or an insert")] string id) =>
+        "with how many other choices each step had - or why the chain stopped. Name the machine's spindle and the " +
+        "chain is the shortest one that ends on it; where none does, the reply names the spindles the chains reach.")]
+    public Task<string> AssembleToSpindle(
+        [Description("The component's id, e.g. a cutter or an insert")] string id,
+        [Description("The machine's spindle as ENCY names it - HSK63, SK40, ISO40, BT40, NT40, Capto C6, KM63; " +
+                     "leave out for any")] string? spindle = null) =>
         Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
-            var chain = await api.GetAssembly(cid, token);
+            var chain = await api.GetAssembly(cid, string.IsNullOrWhiteSpace(spindle) ? null : spindle.Trim(), token);
             if (chain == null) return NoComponent(cid);
             var reply = new StringBuilder();
             for (int i = 0; i < chain.Steps.Count; i++)
@@ -85,7 +89,10 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
                 reply.AppendLine($"{i + 1}. {Replies.Line(step.Component)} (+{step.Alternatives} other choices)");
             }
             if (chain.Steps.Count == 0) reply.AppendLine("Nothing in the catalogue holds it.");
-            reply.Append(chain.ReachesSpindle ? "Reaches the spindle." : "Stopped: " + chain.StoppedBecause);
+            // which spindle, where the site says: "mounts in a HSK63 spindle"
+            reply.Append(chain.ReachesSpindle
+                ? "Reaches the spindle" + (chain.StoppedBecause is { } on && on.StartsWith("mounts in a ") ? ": " + on : "") + "."
+                : "Stopped: " + chain.StoppedBecause);
             return reply.ToString();
         });
 

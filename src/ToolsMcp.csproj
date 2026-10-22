@@ -12,7 +12,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>tools-mcp</ToolCommandName>
     <PackageId>EncySoftware.ToolsMcp</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>EncySoftware</Authors>
     <Description>MCP server for Cursor, Claude Code and Codex: find cutting tools on tools.encycam.com, build kits and fill your ENCY tool libraries</Description>
     <PackageProjectUrl>https://github.com/EncySoftware/tools-mcp</PackageProjectUrl>

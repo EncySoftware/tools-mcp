@@ -101,9 +101,12 @@ internal sealed class FakeToolsApi : IToolsApi
         return Task.FromResult(Compats.GetValueOrDefault(id));
     }
 
-    public Task<AssemblyChain?> GetAssembly(string id, string token)
+    public string? LastSpindle { get; private set; }
+
+    public Task<AssemblyChain?> GetAssembly(string id, string? spindle, string token)
     {
         Saw(nameof(GetAssembly), token);
+        LastSpindle = spindle;
         return Task.FromResult(Assemblies.GetValueOrDefault(id));
     }
 
