@@ -20,7 +20,8 @@ builder.Services
     .WithStdioServerTransport()
     .WithTools<CatalogueTools>()
     .WithTools<SearchTools>()
-    .WithTools<ComponentTools>();
+    .WithTools<ComponentTools>()
+    .WithTools<BuildTools>();
 
 await builder.Build().RunAsync();
 return 0;
