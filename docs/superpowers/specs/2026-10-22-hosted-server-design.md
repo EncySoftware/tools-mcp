@@ -1,6 +1,6 @@
 # tools-mcp as a hosted server — design
 
-Date: 2026-10-22. Status: builder-checked (three questions settled as my calls, marked); waiting for the user's approval.
+Date: 2026-10-22. Status: approved by the user on 2026-10-22. Plan: docs/superpowers/plans/2026-10-22-hosted-server.md.
 
 ## Why
 
