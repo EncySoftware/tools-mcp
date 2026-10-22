@@ -8,7 +8,7 @@ person's account, checks what fits what, and puts the tools into a library in th
 that library through the Tools catalogue extension. It is the tools.encycam.com counterpart of
 [dmc-mcp](https://github.com/EncySoftware/dmc-mcp).
 
-Status: 0.1.0, not released yet.
+Status: 0.1.0, not released yet. 0.2.0 adds the hosted server for Hermes.
 
 | Tool | What it does |
 |---|---|
@@ -98,7 +98,7 @@ command = "tools-mcp"
 ## Files
 
 Downloads and builds go to `Downloads\ENCY tools` unless a tool is given a `folder`. A file you already have is
-never written over: a second `Kit.mKit` becomes `Kit (2).mKit`.
+never written over: a second `Kit.mKit` becomes `Kit (2).mKit`. The hosted server hands out links instead (below).
 
 ## What it will not do
 
@@ -119,6 +119,47 @@ never written over: a second `Kit.mKit` becomes `Kit (2).mKit`.
 | `TOOLS_TOKEN` | a ready access token instead of the stored sign-in, for debugging and CI. It lives minutes. |
 | `TOOLS_CLIENT_ID`, `TOOLS_KEYCLOAK_TOKEN_ENDPOINT` | another Keycloak client or server |
 | `TOOLS_AUTH_FILE` | where the refresh token is kept (tests) |
+
+## Hosted server (for Hermes)
+
+`tools-mcp serve` runs the same tools over MCP Streamable HTTP, for an agent that cannot start a local process. On the
+tools server it answers at **`https://tools.encycam.com/mcp`**.
+
+- **Every call is a person's.** It carries `Authorization: Bearer <access token>` of the person the agent works for: a
+  `licsys` access token (not the ID or the refresh token) minted for a client named in `TOOLS_MCP_CLIENTS` (its `azp`)
+  or for an audience named in `TOOLS_MCP_AUDIENCE`. The call runs with that token, so it sees that person's supplier
+  catalogues and libraries. There is no key and no account of the server's own.
+- A refused token gets `401` with `error="invalid_token"`: refresh it and repeat the request. `503` means Keycloak could
+  not be reached to check it: try again in a minute. MCP clients that discover the sign-in themselves (RFC 9728) find
+  the realm at `https://tools.encycam.com/.well-known/oauth-protected-resource/mcp`, which every 401 names.
+- **Files come back as links.** `download_kit`, `build_kit`, `build_custom_tool`, `export_library` and
+  `save_component_file` reply with `https://tools.encycam.com/mcp/files/<id>/<name>`. The link opens without a token for
+  1 hour, so the person can open it in a browser or a messenger. A `folder` is refused. At most 100 MB a file, 300 MB a
+  person, 1 GB in all.
+- **The token goes on to the site.** tools.encycam.com takes a token only from the clients its backend lists in
+  `TOOLSDB_ACCEPTED_CLIENTS`, so the agent's client goes there too (`deploy/README-go-live.md` in tools-encycam-com).
+  The server never stores, logs or echoes a token.
+- **A log line a call:** the tool, the first 12 hex of a hash of the person, and the `kit`, `classCode`, `page` and
+  `pageSize` it was given. Not the name and not what was searched for.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TOOLS_MCP_CLIENTS` | none | comma-separated `azp` values a token must have; this or `TOOLS_MCP_AUDIENCE` is required |
+| `TOOLS_MCP_AUDIENCE` | none | comma-separated `aud` values, one of which a token must carry |
+| `TOOLS_MCP_ISSUER` | `https://webservices.encycam.com/keycloak/realms/licsys` | the realm whose access tokens are taken |
+| `TOOLS_MCP_PUBLIC_URL` | `https://tools.encycam.com` | the site as clients see it: for the links, the 401 and the metadata |
+| `TOOLS_MCP_DATA` | `/data` | where the links' files are kept |
+
+**Running it (operators).** On the tools server, once, with this repository's `deploy/` folder at hand:
+
+    mkdir -p /opt/tools-mcp/data && chown 1654:1654 /opt/tools-mcp/data && chmod 700 /opt/tools-mcp/data
+    cp deploy/tools-mcp.env.example /opt/tools-mcp/tools-mcp.env && chmod 600 /opt/tools-mcp/tools-mcp.env
+    sh deploy/update.sh 0.2.0
+
+Then put `deploy/nginx-tools-mcp.conf` into the site's `server` block (`/etc/nginx/sites-enabled/tools.encycam.com`)
+and run `nginx -t && systemctl reload nginx`. After that, `sh deploy/update.sh <version>` for every release. The
+container listens on `127.0.0.1:8097`, with 512 MB of memory and its logs capped at 3 × 10 MB. At startup
+`docker logs tools-mcp` says who may come in and whether the realm's keys could be fetched.
 
 ## Development
 
