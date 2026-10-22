@@ -326,6 +326,48 @@ public class ServeTests : IAsyncLifetime
         Assert.Empty(Kept());
     }
 
+    // ------------------------------------------------------------------ the call line
+
+    /** The lines that name a call of the tool. */
+    private string[] CallLines(string tool) => _logs.Lines.Where(l => l.Contains("Call " + tool + " by ")).ToArray();
+
+    /**
+     * Through the hosted server every call reaches the site from one address: without this line, wholesale paging of a
+     * catalogue could not be told from ordinary use (design, 2026-10-22).
+     */
+    [Fact]
+    public async Task EveryCallIsLoggedWithWhoAndWhere()
+    {
+        var http = await Start(new FakeToolsApi());
+        await http.SendAsync(Call("find_components", new { kit = "sandvik", page = 2, query = "CNMG 120408" }, _realm.Token(sub: "sub-anna")));
+        var who = Caller.Person("t", "n", TestIssuer.Issuer, "sub-anna").Owner["user:".Length..][..12];
+        var line = Assert.Single(CallLines("find_components"));
+        Assert.Contains($"Call find_components by {who} kit=sandvik, page=2", line);
+        Assert.DoesNotContain("CNMG", line); // what a person searches for is theirs
+    }
+
+    [Fact]
+    public async Task TheCallLineNamesNoToken()
+    {
+        var http = await Start(new FakeToolsApi());
+        var anna = _realm.Token(sub: "sub-anna", name: "anna@example.com");
+        await Reply(await http.SendAsync(Call("whoami", new { }, anna)));
+        var line = Assert.Single(CallLines("whoami"));
+        foreach (var secret in new[] { anna, anna.Split('.')[^1], "anna@example.com", "sub-anna" })
+            Assert.DoesNotContain(secret, line);
+    }
+
+    /** An argument is the agent's text: it cannot start a line of its own in the log. */
+    [Fact]
+    public async Task AnArgumentCannotForgeALogLine()
+    {
+        var http = await Start(new FakeToolsApi());
+        await http.SendAsync(Call("find_components", new { kit = "a\nInformation ToolsMcp.Calls: Call delete_library by 000000000000" }, _realm.Token()));
+        var line = Assert.Single(CallLines("find_components"));
+        Assert.DoesNotContain("\n", line);
+        Assert.Contains("kit=a Information", line);
+    }
+
     // ------------------------------------------------------------------ the settings
 
     [Fact]

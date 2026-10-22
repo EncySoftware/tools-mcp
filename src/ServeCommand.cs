@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -78,6 +79,28 @@ public static class ServeCommand
         }
     }
 
+    /** What a call's line names of its arguments: where in the catalogues it looks, never what a person searches for. */
+    private static readonly string[] LoggedArguments = ["kit", "classCode", "page", "pageSize"];
+
+    /** Whose call, for its line: the first 12 hex of the person's hash (Caller.Owner), never a name or the token. */
+    internal static string Who(Caller? caller) =>
+        caller?.Owner is { } owner && owner.StartsWith("user:", StringComparison.Ordinal) ? owner["user:".Length..][..12] : "nobody";
+
+    internal static string Where(IEnumerable<KeyValuePair<string, JsonElement>>? arguments)
+    {
+        if (arguments == null) return "";
+        var given = arguments.ToDictionary(a => a.Key, a => a.Value);
+        return string.Join(", ", LoggedArguments.Where(given.ContainsKey).Select(k => k + "=" + Clean(given[k])));
+    }
+
+    /** An argument as plain text: no control characters, so it cannot start a log line of its own; 60 characters at most. */
+    private static string Clean(JsonElement value)
+    {
+        var text = value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : value.GetRawText();
+        text = new string(text.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
+        return text.Length > 60 ? text[..60] + "..." : text;
+    }
+
     /** The startup line: who may come in. */
     internal static string Modes(ServeSettings settings) =>
         $"Ways in: {settings.Tokens.Describe()}; each call runs as the token's person; files as links for 1 hour; "
@@ -86,6 +109,10 @@ public static class ServeCommand
     internal static WebApplication Build(string[] args, ServeSettings settings, Action<IServiceCollection>? configure = null)
     {
         var builder = WebApplication.CreateBuilder(args);
+        // One line a call: through this server every call reaches the site from one address, and without the line
+        // wholesale paging of a catalogue could not be told from ordinary use (design, 2026-10-22). Set once the app is
+        // built; no call comes before that.
+        ILogger? calls = null;
         // A token travels in a header: keep ASP.NET from logging requests.
         builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 
@@ -107,10 +134,17 @@ public static class ServeCommand
             .WithTools<SearchTools>()
             .WithTools<ComponentTools>()
             .WithTools<BuildTools>()
-            .WithTools<LibraryTools>();
+            .WithTools<LibraryTools>()
+            .WithRequestFilters(f => f.AddCallToolFilter(next => async (request, ct) =>
+            {
+                calls?.LogInformation("Call {Tool} by {Who} {Args}",
+                    request.Params?.Name, Who(Caller.Current), Where(request.Params?.Arguments));
+                return await next(request, ct);
+            }));
 
         var app = builder.Build();
         var loggers = app.Services.GetRequiredService<ILoggerFactory>();
+        calls = loggers.CreateLogger("ToolsMcp.Calls");
         var door = new Door(app.Services.GetRequiredService<UserTokens>(), settings.MetadataUrl, loggers.CreateLogger<Door>());
         app.Use((ctx, next) => door.Handle(ctx, next));
         app.UseRouting();
