@@ -12,11 +12,13 @@ var builder = Host.CreateApplicationBuilder(args);
 // stdout is the MCP protocol; logs go to stderr only.
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
+builder.Services.AddSingleton<IToolsApi, ToolsApi>();
 builder.Services.AddSingleton<TokenProvider>();
 
 builder.Services
     .AddMcpServer()
-    .WithStdioServerTransport();
+    .WithStdioServerTransport()
+    .WithTools<CatalogueTools>();
 
 await builder.Build().RunAsync();
 return 0;
