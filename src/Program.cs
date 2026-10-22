@@ -21,7 +21,8 @@ builder.Services
     .WithTools<CatalogueTools>()
     .WithTools<SearchTools>()
     .WithTools<ComponentTools>()
-    .WithTools<BuildTools>();
+    .WithTools<BuildTools>()
+    .WithTools<LibraryTools>();
 
 await builder.Build().RunAsync();
 return 0;
