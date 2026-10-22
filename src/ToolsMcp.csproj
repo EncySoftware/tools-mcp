@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- .NET 8 support ends 10 Nov 2026: built for net8.0, the tool runs on a newer major runtime when 8 is
+         absent. Where 8 is installed it is still the one used. -->
+    <RollForward>Major</RollForward>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ToolsMcp</RootNamespace>
+    <AssemblyName>tools-mcp</AssemblyName>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>tools-mcp</ToolCommandName>
+    <PackageId>EncySoftware.ToolsMcp</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>EncySoftware</Authors>
+    <Description>MCP server for Cursor, Claude Code and Codex: find cutting tools on tools.encycam.com, build kits and fill your ENCY tool libraries</Description>
+    <PackageProjectUrl>https://github.com/EncySoftware/tools-mcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/EncySoftware/tools-mcp</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+    <PackageTags>ency;encycam;cam;cutting-tools;tool-library;mcp;model-context-protocol;dotnet-tool;cursor;claude-code;codex</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ToolsMcp.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\LICENSE.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="1.4.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+  </ItemGroup>
+</Project>
