@@ -30,6 +30,11 @@ if (args.Length > 0 && args[0].Equals("doctor", StringComparison.OrdinalIgnoreCa
         SetupCommand.DefaultCursorConfigPath, CodexConfig.DefaultHome, Console.WriteLine);
 }
 
+// `tools-mcp serve`: the same tools over HTTP for an agent that cannot start a process (Hermes), each call as the
+// person whose access token it carries.
+if (args.Length > 0 && args[0].Equals("serve", StringComparison.OrdinalIgnoreCase))
+    return await ServeCommand.Run(args[1..]);
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // stdout is the MCP protocol; logs go to stderr only.

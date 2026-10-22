@@ -28,6 +28,9 @@ public class TokenProvider
     private string? _cachedAccess;
     private DateTimeOffset _cachedUntil = DateTimeOffset.MinValue;
 
+    /** How a person signs in again, for the replies that ask it of them; the hosted server says it its own way (CallerTokens). */
+    public virtual string SignInFix => "run tools-mcp login";
+
     /** TOOLS_AUTH_FILE points the token file elsewhere; tests use it. */
     public static string AuthFilePath =>
         Environment.GetEnvironmentVariable("TOOLS_AUTH_FILE") is { Length: > 0 } file

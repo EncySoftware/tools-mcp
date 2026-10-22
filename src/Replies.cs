@@ -10,8 +10,6 @@ namespace ToolsMcp;
 internal static class Replies
 {
     public const string InEncy = "In ENCY: the Tools catalogue extension lists your libraries - open it there.";
-    public const string NotSignedIn = "ERROR: not signed in - run tools-mcp login";
-    public const string SignInAgain = "ERROR: the sign-in has expired or was refused - run tools-mcp login";
 
     /// <summary>Runs a tool's body with the person's token, and turns every way it can go wrong into a reply.</summary>
     public static async Task<string> WithToken(TokenProvider tokens, Func<string, Task<string>> body)
@@ -19,9 +17,9 @@ internal static class Replies
         string? token;
         try { token = await tokens.GetAccessToken(); }
         catch (Exception e) { return "ERROR: the ENCY sign-in server did not answer: " + e.Message; }
-        if (token == null) return NotSignedIn;
+        if (token == null) return "ERROR: not signed in - " + tokens.SignInFix;
         try { return await body(token); }
-        catch (ToolsHttpException e) { return Explain(e); }
+        catch (ToolsHttpException e) { return Explain(e, tokens.SignInFix); }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
         {
             return "ERROR: tools.encycam.com did not answer: " + e.Message;
@@ -33,10 +31,10 @@ internal static class Replies
         catch (Exception e) { return "ERROR: " + e.Message; }
     }
 
-    /// <summary>A refusal in words: 401 is a sign-in to renew; anything else is the server's own reason.</summary>
-    public static string Explain(ToolsHttpException e)
+    /// <summary>A refusal in words: 401 is a sign-in to renew (signInFix says how); anything else is the server's own reason.</summary>
+    public static string Explain(ToolsHttpException e, string signInFix)
     {
-        if (e.Status == 401) return SignInAgain;
+        if (e.Status == 401) return "ERROR: the sign-in has expired or was refused - " + signInFix;
         string reason = ServerMessage(e.Body);
         return "ERROR: " + (reason.Length > 0 ? reason : "tools.encycam.com answered " + e.Status);
     }

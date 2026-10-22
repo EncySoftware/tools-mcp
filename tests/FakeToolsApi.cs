@@ -24,7 +24,14 @@ internal sealed class FakeToolsApi : IToolsApi
     public Dictionary<string, long> Downloads { get; } = new();
     public Dictionary<string, DownloadedFile> KitFiles { get; } = new();
 
-    public Task<Account> GetMe(string token) { Saw(nameof(GetMe), token); return Task.FromResult(Me); }
+    /** When set, /me answers by the token - whose it is - after whatever wait the test puts in. */
+    public Func<string, Task<Account>>? MeFor { get; set; }
+
+    public async Task<Account> GetMe(string token)
+    {
+        Saw(nameof(GetMe), token);
+        return MeFor != null ? await MeFor(token) : Me;
+    }
 
     public Task<IReadOnlyList<KitSummary>> ListKits(string? query, string? discipline, int? encyVersion, string token)
     {
