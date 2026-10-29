@@ -24,6 +24,7 @@ Status: 0.3.0. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0,
 | `check_fit` | Which of 2 to 50 hand-picked components takes which, checked before they are built. |
 | `save_component_file` | Saves the supplier's STEP model, drawing or photo, named after the component. |
 | `build_kit` | Builds the chosen components plus custom drills and end mills into one `.mKit` and saves it. Up to 500. |
+| `build_gtc_package` | The chosen components as a GTC package - ISO 13399 p21 data, 3D models and pictures - for a system that reads GTC rather than `.mKit`. Only supplier catalogues' components with a GTC class go in; our own are left out and counted. Up to 500. |
 | `build_custom_tool` | A drill or end mill the catalogue lacks, built by its numbers as an `.mKit`. |
 | `list_libraries` | The person's libraries, with how many items each holds and how many of them are gone from the catalogue. |
 | `show_library` | What a library holds, marking items the supplier has since withdrawn. |
@@ -47,6 +48,7 @@ lists the account's libraries.
 - *"What Iscar end mills Ø10–12 are there that can go into a kit?"* `search_options`, then `find_components`
   with `buildableOnly`.
 - *"Make me a kit of these five and save it."* `build_kit`.
+- *"The same five as GTC, for our tool management system."* `build_gtc_package`.
 - *"A Ø7.3 drill, 90 mm long - there isn't one in the catalogue."* `build_custom_tool`, or `add_to_library`
   with a custom tool.
 - *"Which of my libraries have items that are gone from the catalogue?"* `list_libraries` and `show_library`.
@@ -132,8 +134,8 @@ tools server it answers at **`https://tools.encycam.com/mcp`**.
 - A refused token gets `401` with `error="invalid_token"`: refresh it and repeat the request. `503` means Keycloak could
   not be reached to check it: try again in a minute. MCP clients that discover the sign-in themselves (RFC 9728) find
   the realm at `https://tools.encycam.com/.well-known/oauth-protected-resource/mcp`, which every 401 names.
-- **Files come back as links.** `download_kit`, `build_kit`, `build_custom_tool`, `export_library` and
-  `save_component_file` reply with `https://tools.encycam.com/mcp/files/<id>/<name>`. The link opens without a token for
+- **Files come back as links.** `download_kit`, `build_kit`, `build_gtc_package`, `build_custom_tool`,
+  `export_library` and `save_component_file` reply with `https://tools.encycam.com/mcp/files/<id>/<name>`. The link opens without a token for
   1 hour, so the person can open it in a browser or a messenger. A `folder` is refused. At most 100 MB a file, 300 MB a
   person, 1 GB in all.
 - **The token goes on to the site.** tools.encycam.com takes a token only from the clients its backend lists in

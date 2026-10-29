@@ -142,6 +142,17 @@ internal sealed class FakeToolsApi : IToolsApi
         return Task.FromResult(new DownloadedFile((spec.Name ?? "7.5mm Drill") + ".mKit", [4, 5]));
     }
 
+    /** How many of the picks the next package leaves out, as the server counts them. */
+    public int GtcLeftOut { get; set; }
+    public (string Name, IReadOnlyList<string> Ids)? LastGtc { get; private set; }
+
+    public Task<GtcPackage> BuildGtcPackage(string name, IReadOnlyList<string> ids, string token)
+    {
+        Saw(nameof(BuildGtcPackage), token);
+        LastGtc = (name, ids);
+        return Task.FromResult(new GtcPackage(new DownloadedFile(name + "-gtc.zip", [8, 9]), GtcLeftOut));
+    }
+
     // ------------------------------------------------------------------ libraries, kept as the server keeps them
     public Dictionary<string, Library> Libraries { get; } = new();
 

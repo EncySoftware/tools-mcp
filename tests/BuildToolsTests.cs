@@ -65,6 +65,48 @@ public class BuildToolsTests : IDisposable
         Assert.Null(_api.LastBuild!.Value.Sockets);
     }
 
+    /** The picks as GTC, for a system that reads it; what has no place in GTC is counted, not silently dropped. */
+    [Fact]
+    public async Task BuildGtcPackageSavesThePackageAndSaysWhatHadNoPlaceInIt()
+    {
+        _api.GtcLeftOut = 1;
+
+        string reply = await Tools().BuildGtcPackage("Spindle", [G("c1"), G("c2")], _folder);
+
+        string path = Path.Combine(_folder, "Spindle-gtc.zip");
+        Assert.Equal($"Saved: {path} - a GTC package of 1 of the 2 parts; 1 has no place in GTC (our own components "
+                     + "and catalogue rows with no GTC class are left out). " + BuildTools.GtcHint, reply);
+        Assert.True(File.Exists(path));
+        Assert.Equal([G("c1"), G("c2")], _api.LastGtc!.Value.Ids);
+    }
+
+    [Fact]
+    public async Task AGtcPackageOfEveryPartSaysSo()
+    {
+        string reply = await Tools().BuildGtcPackage("Spindle", [G("c1"), G("c2")], _folder);
+
+        Assert.Equal($"Saved: {Path.Combine(_folder, "Spindle-gtc.zip")} - a GTC package of 2 parts. " + BuildTools.GtcHint,
+            reply);
+    }
+
+    [Fact]
+    public async Task BuildGtcPackageRefusesWhatIsNoComponentId()
+    {
+        Assert.Equal("ERROR: 'ER16 collet' is not a component id - find_components gives them",
+            await Tools().BuildGtcPackage("Spindle", [G("c1"), "ER16 collet"], _folder));
+        Assert.False(_api.Called(nameof(IToolsApi.BuildGtcPackage)));
+    }
+
+    [Fact]
+    public async Task AGtcPackageOfOurOwnPartsIsRefusedInTheServersWords()
+    {
+        _api.Fail[nameof(IToolsApi.BuildGtcPackage)] = new ToolsHttpException(400,
+            """{"status":400,"message":"none of these parts comes from a supplier's catalogue with a GTC class"}""");
+
+        Assert.Equal("ERROR: none of these parts comes from a supplier's catalogue with a GTC class",
+            await Tools().BuildGtcPackage("Ours", [G("c1")], _folder));
+    }
+
     [Fact]
     public async Task BuildKitWithNoComponentIdsStillBuildsItsCustomTools()
     {

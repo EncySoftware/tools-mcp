@@ -46,6 +46,32 @@ public class BuildTools(IToolsApi api, TokenProvider tokens, IFileSink? files = 
                    + ImportHint;
         });
 
+    internal const string GtcHint = "A system that reads GTC imports it; ENCY takes build_kit's .mKit.";
+
+    [McpServerTool(Name = "build_gtc_package"), Description(
+        "Writes the chosen components as a GTC package - ISO 13399 p21 data with 3D models and pictures, for a CAM or " +
+        "tool management system that reads GTC rather than ENCY's .mKit - and saves it to the person's disk. Only " +
+        "supplier catalogues' components with a GTC class go in; our own components are left out and counted. Parts " +
+        "of several makers go in one package, each under its maker. 500 at most.")]
+    public Task<string> BuildGtcPackage(
+        [Description("The package's name")] string name,
+        [Description("The components' ids, from find_components")] string[] componentIds,
+        [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            _files.Check(folder);
+            var (ids, bad) = Ids.All(componentIds);
+            if (bad != null) return Ids.NotAComponent(bad);
+            var package = await api.BuildGtcPackage(name, ids, token);
+            int picked = ids.Distinct().Count();
+            string what = package.LeftOut > 0
+                ? $"a GTC package of {picked - package.LeftOut} of the {picked} parts; {package.LeftOut} "
+                  + $"{(package.LeftOut == 1 ? "has" : "have")} no place in GTC (our own components and catalogue rows "
+                  + "with no GTC class are left out)"
+                : $"a GTC package of {picked} parts";
+            return $"{_files.Deliver(package.File, folder)} - {what}. " + GtcHint;
+        });
+
     [McpServerTool(Name = "build_custom_tool"), Description(
         "A drill or end mill the catalogue does not carry, built from its numbers as an .mKit and saved to the " +
         "person's disk. family: drill or endmill; diameter 0.1 to 100 mm; length 1 to 400 mm; shank 0.1 to 100 mm.")]

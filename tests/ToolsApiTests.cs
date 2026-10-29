@@ -195,6 +195,22 @@ public class ToolsApiTests
         Assert.Equal("kit-bytes"u8.ToArray(), file.Bytes);
     }
 
+    /** A GTC package says how many of the picks had no place in it: our own parts, a supplier's row with no class. */
+    [Fact]
+    public async Task AGtcPackageSaysHowManyPicksWereLeftOut()
+    {
+        var stub = new StubHandler().On("POST", "/api/pull/gtc", HttpStatusCode.OK, "zip",
+            "attachment; filename=\"Spindle-gtc.zip\"", "application/zip",
+            new Dictionary<string, string> { ["X-Left-Out"] = "2" });
+
+        var package = await StubHandler.Api(stub).BuildGtcPackage("Spindle", ["c1", "c2", "c3"], "t");
+
+        Assert.Equal("Spindle-gtc.zip", package.File.FileName);
+        Assert.Equal("zip"u8.ToArray(), package.File.Bytes);
+        Assert.Equal(2, package.LeftOut);
+        Assert.Equal("""{"name":"Spindle","ids":["c1","c2","c3"]}""", stub.Requests[0].Body);
+    }
+
     [Fact]
     public async Task APlainFileNameIsKept()
     {

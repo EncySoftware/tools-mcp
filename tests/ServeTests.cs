@@ -142,7 +142,7 @@ public class ServeTests : IAsyncLifetime
         var anna = _realm.Token();
         Assert.Equal(HttpStatusCode.OK, (await http.SendAsync(Initialize(anna))).StatusCode);
         var list = await Answer(await http.SendAsync(Rpc("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""", anna)));
-        Assert.Equal(21, list.GetProperty("result").GetProperty("tools").GetArrayLength());
+        Assert.Equal(22, list.GetProperty("result").GetProperty("tools").GetArrayLength());
     }
 
     [Fact]
@@ -353,6 +353,7 @@ public class ServeTests : IAsyncLifetime
     [Theory]
     [InlineData("download_kit")]
     [InlineData("build_kit")]
+    [InlineData("build_gtc_package")]
     [InlineData("build_custom_tool")]
     [InlineData("export_library")]
     [InlineData("save_component_file")]
@@ -370,6 +371,7 @@ public class ServeTests : IAsyncLifetime
         {
             ["download_kit"] = new { slug = "mills" },
             ["build_kit"] = new { name = "Mills", componentIds = new[] { TestIds.G("c1") } },
+            ["build_gtc_package"] = new { name = "Mills", componentIds = new[] { TestIds.G("c1") } },
             ["build_custom_tool"] = new { family = "drill", diameterMm = 7.5, lengthMm = 80.0 },
             ["export_library"] = new { id = library },
             ["save_component_file"] = new { id = TestIds.G("c1"), kind = "model" },

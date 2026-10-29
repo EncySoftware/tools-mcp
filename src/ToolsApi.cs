@@ -45,6 +45,8 @@ public record LibraryItem(string? Component, string? Name, string? Kit, bool Pre
 public record Library(string Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<LibraryItem> Items);
 public record LibrarySummary(string Id, string Name, int ItemCount, int MissingCount, DateTimeOffset UpdatedAt);
 public record DownloadedFile(string FileName, byte[] Bytes);
+/// <summary>Picks as a GTC package, and how many of them had no place in it: our own parts, a row with no GTC class.</summary>
+public record GtcPackage(DownloadedFile File, int LeftOut);
 public enum ComponentFileKind { Model, Drawing, Picture }
 
 /// <summary>A search, in the agent's words; <see cref="ToolsApi"/> puts them into the API's.</summary>
@@ -72,6 +74,7 @@ public interface IToolsApi
     Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetAcceptsAmong(IReadOnlyList<string> ids, string token);
     Task<DownloadedFile?> GetComponentFile(string id, ComponentFileKind kind, string token);
     Task<DownloadedFile> BuildKit(string name, IReadOnlyList<string> ids, IReadOnlyList<CustomTool> custom, string? sockets, string token);
+    Task<GtcPackage> BuildGtcPackage(string name, IReadOnlyList<string> ids, string token);
     Task<DownloadedFile> BuildCustomTool(CustomTool spec, string token);
     Task<IReadOnlyList<LibrarySummary>> ListLibraries(string token);
     Task<Library?> GetLibrary(string id, string token);
@@ -189,6 +192,17 @@ public class ToolsApi : IToolsApi
     public async Task<DownloadedFile> BuildKit(string name, IReadOnlyList<string> ids, IReadOnlyList<CustomTool> custom,
                                               string? sockets, string token) =>
         await FileOf(await SendForFile(HttpMethod.Post, "/pull", token, new { name, ids, sockets, custom }), name + ".mKit");
+
+    /** The count comes as X-Left-Out, read before FileOf lets the answer go. */
+    public async Task<GtcPackage> BuildGtcPackage(string name, IReadOnlyList<string> ids, string token)
+    {
+        var response = await SendForFile(HttpMethod.Post, "/pull/gtc", token, new { name, ids });
+        int leftOut = response.Headers.TryGetValues("X-Left-Out", out var values)
+                      && int.TryParse(values.FirstOrDefault(), NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+            ? n
+            : 0;
+        return new GtcPackage(await FileOf(response, name + "-gtc.zip"), leftOut);
+    }
 
     public async Task<DownloadedFile> BuildCustomTool(CustomTool spec, string token) =>
         await FileOf(await SendForFile(HttpMethod.Post, "/custom-tool", token, spec), (spec.Name ?? "Custom tool") + ".mKit");

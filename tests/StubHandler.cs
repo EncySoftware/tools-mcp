@@ -10,7 +10,8 @@ internal sealed class StubHandler : HttpMessageHandler
     private readonly Dictionary<string, Func<HttpResponseMessage>> _answers = new();
 
     public StubHandler On(string method, string path, HttpStatusCode status, string body = "",
-                          string? contentDisposition = null, string contentType = "application/json")
+                          string? contentDisposition = null, string contentType = "application/json",
+                          IReadOnlyDictionary<string, string>? headers = null)
     {
         _answers[method + " " + path] = () =>
         {
@@ -18,6 +19,8 @@ internal sealed class StubHandler : HttpMessageHandler
             response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
             if (contentDisposition != null)
                 response.Content.Headers.TryAddWithoutValidation("Content-Disposition", contentDisposition);
+            foreach (var (name, value) in headers ?? new Dictionary<string, string>())
+                response.Headers.TryAddWithoutValidation(name, value);
             return response;
         };
         return this;
