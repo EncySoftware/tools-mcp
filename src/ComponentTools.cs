@@ -71,12 +71,14 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
 
     [McpServerTool(Name = "assemble_to_spindle"), Description(
         "The chain above a component up to the part that mounts in the machine: what holds it, what holds that, " +
-        "with how many other choices each step had - or why the chain stopped. Name the machine's spindle and the " +
-        "chain is the shortest one that ends on it; where none does, the reply names the spindles the chains reach.")]
+        "with how many other choices each step had - or why the chain stopped. Name the machine's spindle or turret " +
+        "station and the chain is the shortest one that ends on it, made of parts that can go into a kit wherever " +
+        "such a chain exists; where none does, the reply names the spindles the chains reach. A lathe's turret " +
+        "block (VDI, BMT) is the chain's last part: the station takes it.")]
     public Task<string> AssembleToSpindle(
         [Description("The component's id, e.g. a cutter or an insert")] string id,
-        [Description("The machine's spindle as ENCY names it - HSK63, SK40, ISO40, BT40, NT40, Capto C6, KM63; " +
-                     "leave out for any")] string? spindle = null) =>
+        [Description("The machine's spindle or turret station - HSK63 (form A), HSK-E50, HSK-F63, HSK-T63, SK40, " +
+                     "ISO40, BT40, NT40, CAT40, Capto C6, KM63, VDI40, BMT55; leave out for any")] string? spindle = null) =>
         Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
@@ -93,6 +95,10 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
             reply.Append(chain.ReachesSpindle
                 ? "Reaches the spindle" + (chain.StoppedBecause is { } on && on.StartsWith("mounts in a ") ? ": " + on : "") + "."
                 : "Stopped: " + chain.StoppedBecause);
+            // the site takes a chain of parts that all go into a kit where one exists: a part that cannot means none does
+            if (chain.ReachesSpindle && chain.Steps.Any(st => !st.Component.Pullable))
+                reply.AppendLine().Append("NOTE: no chain of parts that all go into a kit reaches it - a kit built from " +
+                                          "this one leaves out the parts marked 'cannot go into a kit'.");
             return reply.ToString();
         });
 

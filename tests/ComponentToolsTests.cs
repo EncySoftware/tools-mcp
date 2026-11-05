@@ -87,6 +87,19 @@ public class ComponentToolsTests : IDisposable
         Assert.Null(_api.LastSpindle);
     }
 
+    /** The site takes a chain of parts that all go into a kit where one exists: one that cannot is said, not hidden. */
+    [Fact]
+    public async Task AChainThroughAPartNoKitTakesIsSaidToBeOne()
+    {
+        var chuck = Holder(G("h2"), "HSK-F63 ER16 chuck") with { Pullable = false };
+        _api.Assemblies[G("c4")] = new AssemblyChain([new AssemblyStep(chuck, 0)], true, "mounts in a HSK-F63 spindle");
+
+        string reply = await Tools().AssembleToSpindle(G("c4"), "HSK-F63");
+
+        Assert.Contains("cannot go into a kit", reply);
+        Assert.Contains("NOTE: no chain of parts that all go into a kit reaches it", reply);
+    }
+
     /** Names are looked up one by one, so the ids are capped: 51 would be 51 lookups for one answer. */
     [Fact]
     public async Task CheckFitNeedsTwoToFiftyIds()
