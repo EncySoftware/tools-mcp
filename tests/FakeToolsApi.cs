@@ -179,13 +179,17 @@ internal sealed class FakeToolsApi : IToolsApi
         return Task.FromResult(library);
     }
 
+    /** What the last add_to_library sent, as it was sent. */
+    public IReadOnlyList<LibraryEntry>? LastAdded { get; private set; }
+
     public Task<Library> AddToLibrary(string id, IReadOnlyList<LibraryEntry> items, string token)
     {
         Saw(nameof(AddToLibrary), token);
+        LastAdded = items;
         var library = Libraries[id];
         var kept = library.Items.ToList();
         foreach (var item in items.Select(ItemOf))
-            if (!kept.Any(k => k.Component == item.Component && k.Custom == item.Custom)) kept.Add(item);
+            if (item.Assembly != null || !kept.Any(k => k.Component == item.Component && k.Custom == item.Custom)) kept.Add(item);
         return Task.FromResult(Libraries[id] = library with { Items = kept });
     }
 
@@ -195,7 +199,8 @@ internal sealed class FakeToolsApi : IToolsApi
         var library = Libraries[id];
         var kept = library.Items
             .Where(i => !items.Any(e => (e.Component != null && e.Component == i.Component)
-                                        || (e.Custom != null && i.Custom != null && SameTool(e.Custom, i.Custom))))
+                                        || (e.Custom != null && i.Custom != null && SameTool(e.Custom, i.Custom))
+                                        || (e.Assembly?.Id != null && e.Assembly.Id == i.Assembly?.Id)))
             .ToList();
         return Task.FromResult(Libraries[id] = library with { Items = kept });
     }
@@ -211,6 +216,12 @@ internal sealed class FakeToolsApi : IToolsApi
         Saw(nameof(DeleteLibrary), token);
         Libraries.Remove(id);
         return Task.CompletedTask;
+    }
+
+    public Task<DownloadedFile> ExportToolList(string id, string token)
+    {
+        Saw(nameof(ExportToolList), token);
+        return Task.FromResult(new DownloadedFile(Libraries[id].Name + ".tom", [7]));
     }
 
     public Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token)
@@ -229,6 +240,10 @@ internal sealed class FakeToolsApi : IToolsApi
     /** As the server fills an item in: the component's own name and kit, or the custom tool as given. */
     private LibraryItem ItemOf(LibraryEntry entry)
     {
+        if (entry.Assembly is { } a)
+            return new LibraryItem(null, a.Name ?? "the assembly", null, true, "Assembly", "Assembly", null, null, null,
+                new LibraryAssembly(Guid.NewGuid().ToString("D"), a.Number, a.Place, a.Parts.Select(ItemOf).ToList(),
+                    a.Spindle, a.GaugeLengthMm));
         if (entry.Custom != null)
             return new LibraryItem(null, null, null, true, entry.Custom.Family, "Custom tool",
                 entry.Custom.DiameterMm, entry.Custom.LengthMm, entry.Custom);

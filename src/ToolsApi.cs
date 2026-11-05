@@ -38,10 +38,19 @@ public record FilterValues(IReadOnlyList<SectionCount> Classes, IReadOnlyList<Se
     IReadOnlyList<SectionCount> Makers, IReadOnlyList<SectionCount> Coatings, IReadOnlyList<SectionCount> Coolant,
     SizeRange Diameters, IReadOnlyList<SectionCount> Shanks);
 public record CustomTool(string Family, double DiameterMm, double LengthMm, double? ShankDiameterMm = null, string? Name = null);
-/// <summary>An item to put in or take out of a library: a catalogue component or a custom tool, never both.</summary>
-public record LibraryEntry(string? Component = null, CustomTool? Custom = null);
+/// <summary>
+/// A tool kept built, as it is saved: its parts from the machine down to the cutting edge, its T number, where it
+/// stands, the spindle it works on (MAIN or SUB) and its measured gauge length. Taken out by its id alone.
+/// </summary>
+public record AssemblyEntry(IReadOnlyList<LibraryEntry> Parts, string? Name = null, string? Number = null,
+    string? Place = null, string? Spindle = null, double? GaugeLengthMm = null, string? Id = null);
+/// <summary>An item to put in or take out of a library: a catalogue component, a custom tool or an assembly of them.</summary>
+public record LibraryEntry(string? Component = null, CustomTool? Custom = null, AssemblyEntry? Assembly = null);
+/// <summary>An assembly on a shelf: its parts as rows, the machine end first.</summary>
+public record LibraryAssembly(string Id, string? Number, string? Place, IReadOnlyList<LibraryItem> Parts,
+    string? Spindle = null, double? GaugeLengthMm = null);
 public record LibraryItem(string? Component, string? Name, string? Kit, bool Present, string? Kind, string? KitName,
-    double? DiameterMm, double? LengthMm, CustomTool? Custom);
+    double? DiameterMm, double? LengthMm, CustomTool? Custom, LibraryAssembly? Assembly = null);
 public record Library(string Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<LibraryItem> Items);
 public record LibrarySummary(string Id, string Name, int ItemCount, int MissingCount, DateTimeOffset UpdatedAt);
 public record DownloadedFile(string FileName, byte[] Bytes);
@@ -84,6 +93,7 @@ public interface IToolsApi
     Task<Library> RenameLibrary(string id, string name, string token);
     Task DeleteLibrary(string id, string token);
     Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token);
+    Task<DownloadedFile> ExportToolList(string id, string token);
 }
 
 public class ToolsApi : IToolsApi
@@ -229,6 +239,9 @@ public class ToolsApi : IToolsApi
 
     public async Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token) =>
         await FileOf(await SendForFile(HttpMethod.Post, "/me/libraries/" + Esc(id) + "/pull", token, new { sockets }), "Library.mKit");
+
+    public async Task<DownloadedFile> ExportToolList(string id, string token) =>
+        await FileOf(await SendForFile(HttpMethod.Get, "/me/libraries/" + Esc(id) + "/tools.tom", token), "Tools.tom");
 
     // ------------------------------------------------------------------ plumbing
 

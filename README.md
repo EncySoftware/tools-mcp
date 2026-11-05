@@ -29,11 +29,13 @@ Status: 0.3.0. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0,
 | `list_libraries` | The person's libraries, with how many items each holds and how many of them are gone from the catalogue. |
 | `show_library` | What a library holds, marking items the supplier has since withdrawn. |
 | `create_library` | Creates a library, empty or with items. A library of the same name stops it unless `force=true`. |
-| `add_to_library` | Adds components and custom tools to a library and keeps what it holds. |
-| `remove_from_library` | Takes the named items out and keeps every other item as it is. Only on the person's request. |
+| `add_to_library` | Adds components, custom tools and assemblies (`assemblies=[...]`) to a library and keeps what it holds. |
+| `create_assembly` | Keeps a tool as it stands built at the machine - cutter in collet in chuck - as one item: its parts in the order they fit (the machine end first), T number, place, spindle (MAIN/SUB) and measured gauge length. |
+| `remove_from_library` | Takes the named items out - components, custom tools, assemblies by their id - and keeps every other item as it is. Only on the person's request. |
 | `rename_library` | Renames a library. |
 | `delete_library` | Deletes a library for good. Only on the person's explicit request. |
 | `export_library` | Saves a library as one `.mKit`. |
+| `export_tool_list` | Saves a library's assemblies as ENCY's tool list (`.tom`): each one tool, built, numbered, reaching as far as measured. In ENCY: Tools, Load existing tool list. |
 
 Every reply that leaves something in a library ends with how to open it in ENCY: the Tools catalogue extension
 lists the account's libraries.
