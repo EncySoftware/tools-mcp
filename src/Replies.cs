@@ -63,7 +63,12 @@ internal static class Replies
         parts.Add(c.Section);
         if (c.DiameterMm is { } d) parts.Add("Ø" + Mm(d) + " mm");
         if (c.LengthMm is { } l) parts.Add("L " + Mm(l) + " mm");
-        parts.Add(c.Pullable ? "can go into a kit" : "cannot go into a kit");
+        // SA-11 TS-04: an insert is no ENCY component of its own; picked with the holder it seats in, it gives the
+        // holder its corner radius
+        parts.Add(c.Pullable ? "can go into a kit"
+            : c.Section.StartsWith("INS", StringComparison.OrdinalIgnoreCase)
+                ? "goes into a kit with its holder (pick both: the holder takes its corner radius)"
+                : "cannot go into a kit");
         var files = new List<string>();
         if (c.Model) files.Add("model");
         if (c.Drawing) files.Add("drawing");

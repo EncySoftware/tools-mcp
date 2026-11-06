@@ -16,16 +16,16 @@ Status: 0.3.0. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0,
 | `list_kits` | Our ready kits and the supplier catalogues, with items, how many can go into a kit, and downloads. A supplier catalogue is marked as one: pick from it with `find_components`. |
 | `describe_kit` | One kit or catalogue: its description, its classes with codes and counts, and for our own kits every item with its parameters. |
 | `download_kit` | Saves one of **our** kits' files (`.mKit` / `.db`). It refuses a supplier catalogue: its file is raw catalogue data, which ENCY cannot open. |
-| `find_components` | Searches every kit and catalogue the account can see: words or a designation, kit, class code, family, machine type, maker, coating, coolant, shank, diameter range, what fits a given component, only what can go into a kit, and sorting. A row gives the id, class, size, whether it can go into a kit, the files, and "goes into N, takes M". At most 50 rows a page. |
+| `find_components` | Searches every kit and catalogue the account can see: words or a designation, kit, class code, family, machine type, maker, coating, coolant, shank, diameter range, what fits a given component, only what can go into a kit, and sorting. A thread is found however a catalogue writes it (`M10`, `1/4-20 UNC`, `thread=`, `pitchMm=`), and a whole part number with `exact=true`. A row gives the id, class, size, whether it can go into a kit, the files, and "goes into N, takes M" - with "no connection" where the maker gives no shank. At most 50 rows a page. |
 | `search_options` | The values the search filters can take for the current search: classes with codes, families, makers, coatings, coolant, shanks and the diameter range. |
 | `describe_component` | One component by id: every parameter its supplier publishes, its connection, and which files exist. |
 | `what_fits` | What a component goes into and what it takes, with totals. |
-| `assemble_to_spindle` | The chain up to the part that mounts in the machine, with the number of other choices at each step, or why it stopped. Given the machine's spindle (HSK63, SK40, BT40, Capto C6...), the shortest chain that ends on it. |
+| `assemble_to_spindle` | The chain up to the part that mounts in the machine, with the number of other choices at each step, or why it stopped. Given the machine's spindle or turret station (HSK63, HSK-F63, HSK-T63, SK40, CAT40, BT40, Capto C6, VDI40, BMT55...), the shortest chain that ends on it, of parts that can all go into a kit wherever there is one. A turret block is the chain's last part. |
 | `check_fit` | Which of 2 to 50 hand-picked components takes which, checked before they are built. |
 | `save_component_file` | Saves the supplier's STEP model, drawing or photo, named after the component. |
-| `build_kit` | Builds the chosen components plus custom drills and end mills into one `.mKit` and saves it. Up to 500. |
+| `build_kit` | Builds the chosen components plus custom tools into one `.mKit` and saves it. Up to 500. An insert picked with the holder it seats in gives the holder its corner radius. |
 | `build_gtc_package` | The chosen components as a GTC package - ISO 13399 p21 data, 3D models and pictures - for a system that reads GTC rather than `.mKit`. Only supplier catalogues' components with a GTC class go in; our own are left out and counted. Up to 500. |
-| `build_custom_tool` | A drill or end mill the catalogue lacks, built by its numbers as an `.mKit`. |
+| `build_custom_tool` | A tool the catalogue lacks, built by its numbers as an `.mKit`: drill, end mill (with a corner radius), ball nose, torus, face mill, spot or centre drill, countersink, chamfer mill, tap, reamer. A size may be given as a setup sheet writes it (`1/4in`, `#7`, `F`) and a tap by its thread (`M10`, `1/4-20 UNC`). |
 | `list_libraries` | The person's libraries, with how many items each holds and how many of them are gone from the catalogue. |
 | `show_library` | What a library holds, marking items the supplier has since withdrawn. |
 | `create_library` | Creates a library, empty or with items. A library of the same name stops it unless `force=true`. |

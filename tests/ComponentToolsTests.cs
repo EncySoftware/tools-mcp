@@ -87,6 +87,15 @@ public class ComponentToolsTests : IDisposable
         Assert.Null(_api.LastSpindle);
     }
 
+    /** An insert is no ENCY component of its own: it goes into a kit with the holder it seats in. */
+    [Fact]
+    public void AnInsertSaysItGoesWithItsHolder()
+    {
+        var insert = Holder(G("i1"), "R390-11 T3 08M-PM 4240") with { Section = "INSCMIL", Pullable = false };
+        Assert.Contains("goes into a kit with its holder", Replies.Line(insert));
+        Assert.Contains("cannot go into a kit", Replies.Line(insert with { Section = "VENDOR" }));
+    }
+
     /** The site takes a chain of parts that all go into a kit where one exists: one that cannot is said, not hidden. */
     [Fact]
     public async Task AChainThroughAPartNoKitTakesIsSaidToBeOne()
