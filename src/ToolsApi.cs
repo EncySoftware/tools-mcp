@@ -38,7 +38,8 @@ public record SizeRange(double? Min, double? Max);
 public record FilterValues(IReadOnlyList<SectionCount> Classes, IReadOnlyList<SectionCount> Families,
     IReadOnlyList<SectionCount> Makers, IReadOnlyList<SectionCount> Coatings, IReadOnlyList<SectionCount> Coolant,
     SizeRange Diameters, IReadOnlyList<SectionCount> Shanks);
-public record CustomTool(string Family, double DiameterMm, double LengthMm, double? ShankDiameterMm = null, string? Name = null);
+public record CustomTool(string Family, double DiameterMm, double LengthMm, double? ShankDiameterMm = null, string? Name = null,
+    double? CornerRadiusMm = null, double? AngleDeg = null, double? PitchMm = null);
 /// <summary>
 /// A tool kept built, as it is saved: its parts from the machine down to the cutting edge, its T number, where it
 /// stands, the spindle it works on (MAIN or SUB) and its measured gauge length. Taken out by its id alone.

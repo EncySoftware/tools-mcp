@@ -3,15 +3,42 @@ using ModelContextProtocol.Server;
 
 namespace ToolsMcp;
 
-/// <summary>A drill or end mill the catalogue lacks, by its numbers: family drill or endmill.</summary>
+/// <summary>A tool the catalogue lacks, by its numbers - or by the size or thread a setup sheet writes it by.</summary>
 public record CustomToolInput(
-    [property: Description("drill or endmill")] string Family,
-    [property: Description("Cutting diameter, mm (0.1 to 100)")] double DiameterMm,
+    [property: Description("drill, endmill, ball, torus (an end mill with a corner radius), facemill, spot, center, countersink, chamfer, tap, reamer")] string Family,
+    [property: Description("Cutting diameter, mm (0.1 to 100; a face mill to 400) - or give size or thread instead")]
+    double? DiameterMm,
     [property: Description("Overall length, mm (1 to 400)")] double LengthMm,
     [property: Description("Shank diameter, mm (0.1 to 100); the cutting diameter when left out")] double? ShankDiameterMm = null,
-    [property: Description("A name; by default the size and the family")] string? Name = null)
+    [property: Description("A name; by default the size and the family")] string? Name = null,
+    [property: Description("Corner radius, mm: an endmill's, torus's or facemill's")] double? CornerRadiusMm = null,
+    [property: Description("Included angle, degrees: a drill's point, a spot or center drill's, a countersink's or chamfer mill's")]
+    double? AngleDeg = null,
+    [property: Description("A tap's pitch, mm; a metric tap takes its coarse pitch when left out")] double? PitchMm = null,
+    [property: Description("The diameter as a setup sheet writes it: 1/4in, 1/2\", #7, F, 6.8mm")] string? Size = null,
+    [property: Description("A tap's thread, which gives its diameter and pitch: M10, M10x1.25, 1/4-20 UNC, #10-32")]
+    string? Thread = null)
 {
-    public CustomTool ToCustomTool() => new(Family, DiameterMm, LengthMm, ShankDiameterMm, Name);
+    /** The tool in millimetres: a size or a thread read into its diameter and pitch, the numbers given first. */
+    public CustomTool ToCustomTool()
+    {
+        double? diameter = DiameterMm;
+        double? pitch = PitchMm;
+        if (!string.IsNullOrWhiteSpace(Thread))
+        {
+            var thread = ToolSizes.Thread(Thread)
+                         ?? throw new ArgumentException($"'{Thread.Trim()}' is no thread: M10, M10x1.25, 1/4-20 UNC, #10-32");
+            diameter ??= thread.DiameterMm;
+            pitch ??= thread.PitchMm;
+        }
+        if (!string.IsNullOrWhiteSpace(Size))
+            diameter ??= ToolSizes.MillimetresOf(Size)
+                         ?? throw new ArgumentException($"'{Size.Trim()}' is no size: 1/4in, 1/2\", #7, F, 6.8mm");
+        if (diameter is not { } d)
+            throw new ArgumentException("give the tool's diameterMm, its size (1/4in, #7, F) or its thread (M10, 1/4-20 UNC)");
+        return new CustomTool(Family, Math.Round(d, 3), LengthMm, ShankDiameterMm, Name, CornerRadiusMm, AngleDeg,
+            pitch is { } p ? Math.Round(p, 4) : null);
+    }
 }
 
 /// <summary>Kits built on tools.encycam.com and saved to the person's disk as .mKit files.</summary>
@@ -73,19 +100,30 @@ public class BuildTools(IToolsApi api, TokenProvider tokens, IFileSink? files = 
         });
 
     [McpServerTool(Name = "build_custom_tool"), Description(
-        "A drill or end mill the catalogue does not carry, built from its numbers as an .mKit and saved to the " +
-        "person's disk. family: drill or endmill; diameter 0.1 to 100 mm; length 1 to 400 mm; shank 0.1 to 100 mm.")]
+        "A tool the catalogue does not carry, built from its numbers as an .mKit and saved to the person's disk: " +
+        "drill, endmill, ball, torus (an end mill with a corner radius), facemill, spot, center, countersink, chamfer, tap, reamer. Diameter 0.1 to 100 mm (a face mill " +
+        "to 400) - or a size as a setup sheet writes it (1/4in, #7, F) or a tap's thread (M10, 1/4-20 UNC); length 1 to " +
+        "400 mm; shank 0.1 to 100 mm; a corner radius for an end mill, an angle for a spot drill or countersink, a pitch " +
+        "for a tap.")]
     public Task<string> BuildCustomTool(
-        [Description("drill or endmill")] string family,
-        [Description("Cutting diameter, mm (0.1 to 100)")] double diameterMm,
-        [Description("Overall length, mm (1 to 400)")] double lengthMm,
+        [Description("drill, endmill, ball, torus (an end mill with a corner radius), facemill, spot, center, countersink, chamfer, tap, reamer")] string family,
+        [Description("Cutting diameter, mm (0.1 to 100; a face mill to 400) - or give size or thread")] double? diameterMm = null,
+        [Description("Overall length, mm (1 to 400)")] double? lengthMm = null,
         [Description("Shank diameter, mm (0.1 to 100); the cutting diameter when left out")] double? shankDiameterMm = null,
         [Description("A name; by default the size and the family")] string? name = null,
+        [Description("Corner radius, mm: an endmill's, torus's or facemill's")] double? cornerRadiusMm = null,
+        [Description("Included angle, degrees: a drill's point, a spot or center drill's, a countersink's")] double? angleDeg = null,
+        [Description("A tap's pitch, mm; a metric tap takes its coarse pitch when left out")] double? pitchMm = null,
+        [Description("The diameter as a setup sheet writes it: 1/4in, #7, F, 6.8mm")] string? size = null,
+        [Description("A tap's thread: M10, M10x1.25, 1/4-20 UNC, #10-32")] string? thread = null,
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
             _files.Check(folder);
-            var file = await api.BuildCustomTool(new CustomTool(family, diameterMm, lengthMm, shankDiameterMm, name), token);
+            if (lengthMm is not { } length) return "ERROR: give the tool's lengthMm, its overall length";
+            var tool = new CustomToolInput(family, diameterMm, length, shankDiameterMm, name, cornerRadiusMm, angleDeg,
+                pitchMm, size, thread).ToCustomTool();
+            var file = await api.BuildCustomTool(tool, token);
             return $"{_files.Deliver(file, folder)}. " + ImportHint;
         });
 

@@ -305,6 +305,9 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
     {
         var text = new StringBuilder($"custom {t.Family} Ø{Replies.Mm(t.DiameterMm)} L {Replies.Mm(t.LengthMm)} mm");
         if (t.ShankDiameterMm is { } shank) text.Append($", shank Ø{Replies.Mm(shank)} mm");
+        if (t.CornerRadiusMm is { } r) text.Append($", R{Replies.Mm(r)}");
+        if (t.AngleDeg is { } a) text.Append($", {Replies.Mm(a)} deg");
+        if (t.PitchMm is { } p) text.Append($", pitch {Replies.Mm(p)} mm");
         if (t.Name != null) text.Append($" ({t.Name})");
         return text.ToString();
     }
