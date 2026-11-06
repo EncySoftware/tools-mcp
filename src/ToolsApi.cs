@@ -32,7 +32,8 @@ public record Compat(string? PlugKey, string? PlugLabel, IReadOnlyList<Component
     IReadOnlyList<string> SocketKeys, IReadOnlyList<Component> Accepts, long AcceptsTotal, JsonObject? Params);
 public record AssemblyStep(Component Component, long Alternatives);
 public record AssemblyChain(IReadOnlyList<AssemblyStep> Steps, bool ReachesSpindle, string? StoppedBecause);
-public record CompatCounts(long PlugsInto, long Accepts);
+/// <summary>What a part goes into and takes; Connected is false where its maker named no connection it stands on.</summary>
+public record CompatCounts(long PlugsInto, long Accepts, bool Connected = true);
 public record SizeRange(double? Min, double? Max);
 public record FilterValues(IReadOnlyList<SectionCount> Classes, IReadOnlyList<SectionCount> Families,
     IReadOnlyList<SectionCount> Makers, IReadOnlyList<SectionCount> Coatings, IReadOnlyList<SectionCount> Coolant,

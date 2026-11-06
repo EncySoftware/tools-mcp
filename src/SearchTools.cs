@@ -63,7 +63,10 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
             foreach (var c in found.Items)
             {
                 reply.Append(Replies.Line(c));
-                if (counts.TryGetValue(c.Id, out var n)) reply.Append($" - goes into {n.PlugsInto}, takes {n.Accepts}");
+                if (counts.TryGetValue(c.Id, out var n))
+                    reply.Append($" - goes into {n.PlugsInto}, takes {n.Accepts}")
+                        // SA-11: "goes into 0" read as a missing holder where the maker gave no shank at all
+                        .Append(n.Connected || n.PlugsInto > 0 ? "" : " (no connection: its maker gives no shank or coupling)");
                 reply.AppendLine();
             }
             if (found.Total == 0) reply.AppendLine("search_options shows what these filters can take.");

@@ -48,6 +48,19 @@ public class SearchToolsTests
         Assert.StartsWith("1 found, page 1 of 1", reply);
         Assert.Contains($"TE90AP 120-W20-17 [id {G("c1")}]", reply);
         Assert.Contains("goes into 3, takes 2", reply);
+        Assert.DoesNotContain("no connection", reply);
+    }
+
+    /** A cutter whose maker named no shank goes into nothing for that, and is said to: no holder is missing. */
+    [Fact]
+    public async Task APartWithNoConnectionIsSaidToHaveNone()
+    {
+        _api.Page = new ComponentsPage(1, 0, 20, [Mill(G("c1"))]);
+        _api.Counts[G("c1")] = new CompatCounts(0, 0, Connected: false);
+
+        string reply = await Tools().FindComponents(kit: "lmt-catalogue");
+
+        Assert.Contains("goes into 0, takes 0 (no connection: its maker gives no shank or coupling)", reply);
     }
 
     [Fact]
