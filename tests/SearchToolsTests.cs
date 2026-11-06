@@ -51,6 +51,21 @@ public class SearchToolsTests
         Assert.DoesNotContain("no connection", reply);
     }
 
+    /** SA-11: a thread and a part number from a setup sheet go to the site as they were asked. */
+    [Fact]
+    public async Task AThreadAPitchAndAnExactNumberGoToTheSite()
+    {
+        _api.Page = new ComponentsPage(0, 0, 20, []);
+
+        await Tools().FindComponents(query: "12212", maker: "Helical Solutions", exact: true, thread: " M10 ", pitchMm: 1.5);
+
+        Assert.Equal("M10", _api.LastQuery!.Thread);
+        Assert.Equal(1.5, _api.LastQuery.PitchMm);
+        Assert.True(_api.LastQuery.Exact);
+        await Tools().FindComponents(query: "q", pitchMm: 0);
+        Assert.Null(_api.LastQuery!.PitchMm);
+    }
+
     /** A cutter whose maker named no shank goes into nothing for that, and is said to: no holder is missing. */
     [Fact]
     public async Task APartWithNoConnectionIsSaidToHaveNone()

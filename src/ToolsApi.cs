@@ -63,7 +63,8 @@ public enum ComponentFileKind { Model, Drawing, Picture }
 public record ComponentQuery(string? Query = null, string? Kit = null, string? ClassCode = null, string? Family = null,
     string? MachineType = null, string? Maker = null, string? Coating = null, string? Coolant = null, string? Shank = null,
     double? MinDiameterMm = null, double? MaxDiameterMm = null, string? Fits = null, bool? Buildable = null,
-    int? EncyVersion = null, string? Sort = null, bool Descending = false, int Page = 0, int Size = 20);
+    int? EncyVersion = null, string? Sort = null, bool Descending = false, int Page = 0, int Size = 20,
+    string? Thread = null, double? PitchMm = null, bool Exact = false);
 
 /// <summary>Every route of tools.encycam.com, called as the person signed in.</summary>
 public interface IToolsApi
@@ -343,7 +344,8 @@ public class ToolsApi : IToolsApi
             ("q", q.Query), ("kit", q.Kit), ("section", q.ClassCode), ("family", q.Family), ("for", q.MachineType),
             ("maker", q.Maker), ("coating", q.Coating), ("coolant", q.Coolant), ("shank", q.Shank),
             ("minDiameter", q.MinDiameterMm), ("maxDiameter", q.MaxDiameterMm), ("fits", q.Fits),
-            ("pullable", q.Buildable), ("ency", q.EncyVersion),
+            ("pullable", q.Buildable), ("ency", q.EncyVersion), ("thread", q.Thread), ("pitch", q.PitchMm),
+            ("exact", q.Exact ? true : null),
         };
         if (paging)
         {

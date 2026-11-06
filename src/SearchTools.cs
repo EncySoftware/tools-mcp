@@ -20,9 +20,12 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
         "Searches components across our kits and the supplier catalogues the account can see. Each row gives the id " +
         "every other tool takes, the class code, the size, whether it can go into a kit, and how many parts it goes " +
         "into and takes. For a kit or a library use buildableOnly=true: only those can go in. Call search_options " +
-        "first rather than guess a class code or a maker's name. At most 50 rows a page.")]
+        "first rather than guess a class code or a maker's name. A thread is found however a catalogue writes it " +
+        "(query or thread: M10, M10x1.5, 1/4-20 UNC, #10-32); a part number from a setup sheet with exact=true and " +
+        "its maker. At most 50 rows a page.")]
     public Task<string> FindComponents(
-        [Description("Words or a designation, e.g. CNMG 120408 or end mill")] string? query = null,
+        [Description("Words or a designation, e.g. CNMG 120408 or end mill; a thread such as M10 or 1/4-20 UNC finds " +
+                     "the parts that cut it")] string? query = null,
         [Description("Only in this kit or catalogue (its slug, from list_kits)")] string? kit = null,
         [Description("A class code, e.g. INSI, MIL, TRNGEI - search_options lists them")] string? classCode = null,
         [Description("A family, e.g. Milling cutter, Drill - search_options lists them")] string? family = null,
@@ -39,7 +42,11 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
         [Description("name, diameter or length")] string? sort = null,
         [Description("Sort from the largest")] bool descending = false,
         [Description("Page number, from 0")] int page = 0,
-        [Description("Rows a page, 1 to 50")] int pageSize = 20) =>
+        [Description("Rows a page, 1 to 50")] int pageSize = 20,
+        [Description("A thread the part cuts: M10, M10x1.5, MF14x1.5, 1/4-20 UNC, #10-32, G 1/2")] string? thread = null,
+        [Description("The thread's pitch, mm, e.g. 1.5")] double? pitchMm = null,
+        [Description("The query is a whole part number: 12212 is 12212, not 1221234 - give the maker too")]
+        bool exact = false) =>
         Replies.WithToken(tokens, async token =>
         {
             if (!string.IsNullOrWhiteSpace(sort) && !Sorts.Contains(sort)) return "ERROR: sort is name, diameter or length";
@@ -50,7 +57,8 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
             var search = new ComponentQuery(query, kit, classCode, family, machineType, maker, coating, coolant, shank,
                 minDiameterMm, maxDiameterMm, fits, buildableOnly ? true : null, encyVersion,
                 string.IsNullOrWhiteSpace(sort) ? null : sort,
-                descending, Math.Max(0, page), size);
+                descending, Math.Max(0, page), size, string.IsNullOrWhiteSpace(thread) ? null : thread.Trim(),
+                pitchMm is > 0 ? pitchMm : null, exact);
             var found = await api.FindComponents(search, token);
             var counts = found.Items.Count == 0
                 ? new Dictionary<string, CompatCounts>()
