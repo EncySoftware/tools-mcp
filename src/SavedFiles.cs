@@ -19,13 +19,22 @@ public static class SavedFiles
     {
         string dir = string.IsNullOrWhiteSpace(folder) ? DefaultFolder : FolderOf(folder.Trim());
         Directory.CreateDirectory(dir);
-        string path = FreeName(dir, Safe(file.FileName));
-        string part = path + ".part";
+        string name = Safe(file.FileName);
+        string stem = Path.GetFileNameWithoutExtension(name), ext = Path.GetExtension(name);
+        string part = Path.Combine(dir, Guid.NewGuid().ToString("N") + ".part");
         try
         {
             File.WriteAllBytes(part, file.Bytes);
-            File.Move(part, path);
-            return path;
+            for (int n = 1; ; n++)
+            {
+                string path = Path.Combine(dir, n == 1 ? name : $"{stem} ({n}){ext}");
+                try
+                {
+                    File.Move(part, path);
+                    return path;
+                }
+                catch (IOException) when (File.Exists(path)) { } // another download already claimed this name
+            }
         }
         catch
         {
@@ -56,12 +65,4 @@ public static class SavedFiles
         return safe.Length == 0 ? "download" : safe;
     }
 
-    private static string FreeName(string dir, string name)
-    {
-        string path = Path.Combine(dir, name);
-        string stem = Path.GetFileNameWithoutExtension(name), ext = Path.GetExtension(name);
-        for (int n = 2; File.Exists(path); n++)
-            path = Path.Combine(dir, $"{stem} ({n}){ext}");
-        return path;
-    }
 }

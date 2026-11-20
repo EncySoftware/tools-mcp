@@ -89,6 +89,17 @@ public class AssemblyToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task AHolderThatAlsoTakesTheCutterKeepsTheAdapterBetweenThem()
+    {
+        Shelf();
+        _api.Accepts[G("k1")] = [G("d1"), G("c1")];
+        string reply = await Tools().CreateAssembly(G("L1"), [G("k1"), G("d1"), G("c1")]);
+        Assert.DoesNotContain("do not fit", reply);
+        var parts = Assert.Single(_api.LastAdded!).Assembly!.Parts;
+        Assert.Equal([G("k1"), G("c1"), G("d1")], parts.Select(p => p.Component));
+    }
+
+    [Fact]
     public async Task ShowLibraryListsAnAssemblyWithItsParts()
     {
         Shelf();

@@ -66,6 +66,19 @@ public class TokenProviderTests
         Assert.Equal(1, keycloak.Calls);
     }
 
+    [Fact]
+    public async Task IndependentProvidersReadTheRotatedTokenUnderTheSameFileLock()
+    {
+        using var auth = new AuthFile("""{"refresh_token":"r1","client_id":"tools-encycam"}""");
+        var keycloak = new FakeKeycloak { Delay = TimeSpan.FromMilliseconds(100) };
+        using var client = new HttpClient(keycloak);
+        var first = new TokenProvider { Client = client };
+        var second = new TokenProvider { Client = client };
+        await Task.WhenAll(first.GetAccessToken(), second.GetAccessToken());
+        Assert.Equal(2, keycloak.Calls);
+        Assert.Equal("r2", keycloak.LastForm["refresh_token"]);
+    }
+
     /** A revoked or expired sign-in is the same to the person as none: sign in again. */
     [Fact]
     public async Task ARefusedRefreshMeansNotSignedIn()
@@ -93,6 +106,7 @@ internal sealed class AuthFile : IDisposable
     {
         Environment.SetEnvironmentVariable("TOOLS_AUTH_FILE", null);
         File.Delete(Path);
+        File.Delete(Path + ".lock");
     }
 }
 

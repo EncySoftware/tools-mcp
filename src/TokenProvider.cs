@@ -55,11 +55,14 @@ public class TokenProvider
         {
             if (_cachedAccess != null && DateTimeOffset.UtcNow < _cachedUntil) return _cachedAccess;
 
-            var stored = ReadStored();
+            string path = Path.GetFullPath(AuthFilePath);
+            if (!File.Exists(path)) return null;
+            using var fileLock = await LockAuthFile(path);
+            var stored = ReadStored(path);
             if (stored.Refresh == null) return null;
 
             // Refresh with the client that ISSUED the token: a refresh token belongs to its client.
-            var resp = await Client.PostAsync(_tokenEndpoint, new FormUrlEncodedContent(new Dictionary<string, string>
+            using var resp = await Client.PostAsync(_tokenEndpoint, new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
                 ["client_id"] = stored.ClientId ?? _clientId,
@@ -68,12 +71,12 @@ public class TokenProvider
             if (!resp.IsSuccessStatusCode) return null;
             var json = await resp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
-            _cachedAccess = doc.RootElement.GetProperty("access_token").GetString();
-            int expiresIn = doc.RootElement.TryGetProperty("expires_in", out var e) ? e.GetInt32() : 300;
-            _cachedUntil = DateTimeOffset.UtcNow.AddSeconds(Math.Max(60, expiresIn - 60));
             // Keycloak rotates refresh tokens: keep the newest one.
             if (doc.RootElement.TryGetProperty("refresh_token", out var rt) && rt.GetString() is { Length: > 0 } newRefresh)
-                SaveRefreshToken(newRefresh, stored.ClientId ?? _clientId);
+                SaveRefreshToken(path, newRefresh, stored.ClientId ?? _clientId);
+            int expiresIn = doc.RootElement.TryGetProperty("expires_in", out var e) ? e.GetInt32() : 300;
+            _cachedUntil = DateTimeOffset.UtcNow.AddSeconds(Math.Max(0, expiresIn - 60));
+            _cachedAccess = doc.RootElement.GetProperty("access_token").GetString();
             return _cachedAccess;
         }
         finally { _refreshing.Release(); }
@@ -87,7 +90,12 @@ public class TokenProvider
     {
         string? refresh = await BrowserLogin.SignIn(_tokenEndpoint, _clientId, OpenInBrowser, Console.Error.WriteLine, Http);
         if (refresh == null) return 1;
-        SaveRefreshToken(refresh, _clientId);
+        string path = Path.GetFullPath(AuthFilePath);
+        string dir = Path.GetDirectoryName(path)!;
+        if (OperatingSystem.IsWindows()) Directory.CreateDirectory(dir);
+        else Directory.CreateDirectory(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        using var fileLock = await LockAuthFile(path);
+        SaveRefreshToken(path, refresh, _clientId);
         Console.WriteLine("Signed in to " + Brand.Product + ". Tokens are minted automatically from now on (stored: "
                           + AuthFilePath + ").");
         return 0;
@@ -110,12 +118,26 @@ public class TokenProvider
 
     private record Stored(string? Refresh, string? ClientId);
 
-    private static Stored ReadStored()
+    // All editors lock the same persistent sidecar. Replacing auth.json leaves the lock in place;
+    // closing the handle (including process exit) releases it.
+    private static async Task<FileStream> LockAuthFile(string path)
+    {
+        var wait = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            try { return new FileStream(path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+            catch (IOException ex) when ((ex.HResult & 0xffff) is 11 or 32 or 33 or 35 && wait.Elapsed < TimeSpan.FromSeconds(60))
+            {
+                await Task.Delay(50);
+            }
+        }
+    }
+
+    private static Stored ReadStored(string path)
     {
         try
         {
-            if (!File.Exists(AuthFilePath)) return new Stored(null, null);
-            using var doc = JsonDocument.Parse(File.ReadAllText(AuthFilePath));
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
             var root = doc.RootElement;
             return new Stored(
                 root.TryGetProperty("refresh_token", out var rt) ? rt.GetString() : null,
@@ -129,22 +151,19 @@ public class TokenProvider
      * owner's alone (0600) and a folder created for it 0700; under the usual umask 022 they came out
      * world-readable in dmc-mcp.
      */
-    private static void SaveRefreshToken(string refresh, string clientId)
+    private static void SaveRefreshToken(string path, string refresh, string clientId)
     {
         var json = JsonSerializer.Serialize(new { refresh_token = refresh, client_id = clientId });
-        var dir = Path.GetDirectoryName(AuthFilePath)!;
-        if (OperatingSystem.IsWindows())
+        string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
+        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        try
         {
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(AuthFilePath, json);
-            return;
+            using (var file = new FileStream(temporary, options))
+            using (var writer = new StreamWriter(file))
+                writer.Write(json);
+            File.Move(temporary, path, overwrite: true);
         }
-        const UnixFileMode ownerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        Directory.CreateDirectory(dir, ownerOnly | UnixFileMode.UserExecute);
-        using (var f = new FileStream(AuthFilePath, new FileStreamOptions
-               { Mode = FileMode.Create, Access = FileAccess.Write, UnixCreateMode = ownerOnly }))
-        using (var w = new StreamWriter(f))
-            w.Write(json);
-        File.SetUnixFileMode(AuthFilePath, ownerOnly); // UnixCreateMode applies only to a file it creates
+        finally { File.Delete(temporary); }
     }
 }

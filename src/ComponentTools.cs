@@ -90,7 +90,9 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
                 var step = chain.Steps[i];
                 reply.AppendLine($"{i + 1}. {Replies.Line(step.Component)} (+{step.Alternatives} other choices)");
             }
-            if (chain.Steps.Count == 0) reply.AppendLine("Nothing in the catalogue holds it.");
+            if (chain.Steps.Count == 0 && chain.ReachesSpindle)
+                return "This component mounts directly" + (chain.StoppedBecause is { } mount && mount.StartsWith("mounts in ")
+                    ? mount["mounts".Length..] : " in the machine") + ".";
             // which spindle, where the site says: "mounts in a HSK63 spindle"
             reply.Append(chain.ReachesSpindle
                 ? "Reaches the spindle" + (chain.StoppedBecause is { } on && on.StartsWith("mounts in a ") ? ": " + on : "") + "."

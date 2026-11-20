@@ -3,6 +3,19 @@ using Xunit;
 
 public class SavedFilesTests : IDisposable
 {
+    [Fact]
+    public async Task ConcurrentSavesWithTheSameNameKeepEachPayloadAndExistingPartialFile()
+    {
+        Directory.CreateDirectory(_folder);
+        string partial = Path.Combine(_folder, "Kit.mKit.part");
+        File.WriteAllText(partial, "existing");
+        var paths = await Task.WhenAll(Enumerable.Range(0, 16).Select(i => Task.Run(() =>
+            SavedFiles.Save(new DownloadedFile("Kit.mKit", [(byte)i]), _folder))));
+        Assert.Equal(paths.Length, paths.Distinct().Count());
+        for (int i = 0; i < paths.Length; i++)
+            Assert.Equal((byte)i, Assert.Single(File.ReadAllBytes(paths[i])));
+        Assert.Equal("existing", File.ReadAllText(partial));
+    }
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "tools-saved-" + Guid.NewGuid().ToString("N")[..8]);
 
     public void Dispose()

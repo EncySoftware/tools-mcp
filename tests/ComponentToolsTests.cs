@@ -72,6 +72,15 @@ public class ComponentToolsTests : IDisposable
         Assert.Contains("Stopped: nothing in the catalogue holds that", reply);
     }
 
+    [Fact]
+    public async Task ZeroAdaptersMeansDirectMountOrTheBackendsReason()
+    {
+        _api.Assemblies[G("c3")] = new AssemblyChain([], true, "mounts in a Capto C3 spindle");
+        Assert.Equal("This component mounts directly in a Capto C3 spindle.", await Tools().AssembleToSpindle(G("c3")));
+        _api.Assemblies[G("c3")] = new AssemblyChain([], false, "no chain reaches SK50");
+        Assert.Equal("Stopped: no chain reaches SK50", await Tools().AssembleToSpindle(G("c3")));
+    }
+
     /** Groshev, 2026-10-22: the chain for the machine at hand - the spindle goes to the site, and the reply names it. */
     [Fact]
     public async Task AnAssemblyToTheSpindleAskedNamesIt()

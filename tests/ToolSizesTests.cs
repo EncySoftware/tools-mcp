@@ -8,6 +8,8 @@ public class ToolSizesTests
     [InlineData("1/4in", 6.35)]
     [InlineData("1/4\"", 6.35)]
     [InlineData("1-1/4in", 31.75)]
+    [InlineData("1 1/4in", 31.75)]
+    [InlineData("2  3/8 \"", 60.325)]
     [InlineData("0.5in", 12.7)]
     [InlineData("#7", 5.1054)]
     [InlineData("No. 7", 5.1054)]

@@ -35,7 +35,8 @@ public static partial class ToolSizes
     /// <summary>The diameter a size names, in millimetres; null for one it does not read.</summary>
     public static double? MillimetresOf(string size)
     {
-        string s = size.Trim().ToUpperInvariant().Replace(" ", "");
+        string s = size.Trim().ToUpperInvariant();
+        s = MixedFractionSpace().Replace(s, "-").Replace(" ", "");
         if (NumberDrill().Match(s) is { Success: true } n)
         {
             int k = int.Parse(n.Groups[1].Value, CultureInfo.InvariantCulture);
@@ -87,6 +88,9 @@ public static partial class ToolSizes
 
     [GeneratedRegex(@"^(?:NO\.?|#)(\d{1,2})$")]
     private static partial Regex NumberDrill();
+
+    [GeneratedRegex(@"(?<=^\d+)\s+(?=\d+\s*/)")]
+    private static partial Regex MixedFractionSpace();
 
     [GeneratedRegex(@"^((?:\d+-)?\d+/\d+|\d*\.\d+|\d+)(?:IN|INCH|"")$")]
     private static partial Regex Inches();

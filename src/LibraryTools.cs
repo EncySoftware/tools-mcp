@@ -226,7 +226,10 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         {
             var (ids, bad) = Ids.All(a.ComponentIds);
             if (bad != null) return ([], [], Ids.NotAComponent(bad));
+            ids = ids.Distinct().ToList();
             if (ids.Count == 0 && a.CustomTool == null) return ([], [], "ERROR: an assembly needs at least one part");
+            if (ids.Count + (a.CustomTool == null ? 0 : 1) > 20)
+                return ([], [], "ERROR: an assembly is 1 to 20 parts");
             string? spindle = string.IsNullOrWhiteSpace(a.Spindle) ? null : a.Spindle.Trim().ToUpperInvariant();
             if (spindle is not (null or "MAIN" or "SUB"))
                 return ([], [], $"ERROR: a spindle is MAIN or SUB, not '{a.Spindle}'");
@@ -268,7 +271,46 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
                 current = next;
             }
         }
-        return ordered;
+        // Keep the usual order for a simple chain, or the labelled gaps when no complete chain exists.
+        if (ordered.Zip(ordered.Skip(1)).All(pair => Takes(takes, pair.First, pair.Second)))
+            return ordered;
+        return CompleteChain(ordered, takes) ?? ordered;
+    }
+
+    private static List<string>? CompleteChain(List<string> parts, IReadOnlyDictionary<string, IReadOnlyList<string>> takes)
+    {
+        // The API accepts at most 20 parts. Each mask describes the unused parts, each bit within
+        // failed[mask] a last part from which those remaining parts cannot form a chain.
+        int count = parts.Count;
+        var next = new int[count];
+        for (int i = 0; i < count; i++)
+            for (int j = 0; j < count; j++)
+                if (i != j && Takes(takes, parts[i], parts[j])) next[i] |= 1 << j;
+
+        int all = (1 << count) - 1;
+        int possibleHeads = all & ~next.Aggregate(0, (mask, edges) => mask | edges);
+        if (System.Numerics.BitOperations.PopCount((uint)possibleHeads) > 1 || next.Count(edges => edges == 0) > 1)
+            return null;
+        var failed = new int[all + 1];
+        var path = new int[count];
+        bool Finish(int index, int last, int remaining)
+        {
+            path[index] = last;
+            if (remaining == 0) return true;
+            if ((failed[remaining] & (1 << last)) != 0) return false;
+            for (int choices = remaining & next[last]; choices != 0; choices &= choices - 1)
+            {
+                int candidate = System.Numerics.BitOperations.TrailingZeroCount((uint)choices);
+                if (Finish(index + 1, candidate, remaining ^ (1 << candidate))) return true;
+            }
+            failed[remaining] |= 1 << last;
+            return false;
+        }
+
+        for (int head = 0; head < count; head++)
+            if ((possibleHeads == 0 || (possibleHeads & (1 << head)) != 0) && Finish(0, head, all ^ (1 << head)))
+                return path.Select(i => parts[i]).ToList();
+        return null;
     }
 
     /** Whether a stored item is the one named: a component by its id; a custom tool as the server matches it - by its
