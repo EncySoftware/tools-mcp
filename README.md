@@ -8,7 +8,7 @@ person's account, checks what fits what, and puts the tools into a library in th
 that library through the Tools catalogue extension. It is the tools.encycam.com counterpart of
 [dmc-mcp](https://github.com/EncySoftware/dmc-mcp).
 
-Status: 0.5.1. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
+Status: 0.5.2. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
 
 | Tool | What it does |
 |---|---|

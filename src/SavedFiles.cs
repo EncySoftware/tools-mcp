@@ -25,16 +25,26 @@ public static class SavedFiles
         try
         {
             File.WriteAllBytes(part, file.Bytes);
-            for (int n = 1; ; n++)
+            // On Unix File.Move can check the destination and then rename in separate operations.
+            // Serialize only the final name selection and move across MCP processes.
+            using var publishing = new Mutex(false, "EncySoftware.ToolsMcp.PublishDownload");
+            try { publishing.WaitOne(); }
+            catch (AbandonedMutexException) { } // ownership passes to this writer
+            try
             {
-                string path = Path.Combine(dir, n == 1 ? name : $"{stem} ({n}){ext}");
-                try
+                for (int n = 1; ; n++)
                 {
-                    File.Move(part, path);
-                    return path;
+                    string path = Path.Combine(dir, n == 1 ? name : $"{stem} ({n}){ext}");
+                    if (File.Exists(path)) continue;
+                    try
+                    {
+                        File.Move(part, path);
+                        return path;
+                    }
+                    catch (IOException) when (File.Exists(path)) { }
                 }
-                catch (IOException) when (File.Exists(path)) { } // another download already claimed this name
             }
+            finally { publishing.ReleaseMutex(); }
         }
         catch
         {
