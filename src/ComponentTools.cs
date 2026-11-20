@@ -65,8 +65,58 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
             if (compat.PlugLabel != null) reply.AppendLine("Connection: " + compat.PlugLabel);
             if (direction is "both" or "holders") Side("Goes into", compat.PlugsIntoTotal, compat.PlugsInto, shown, reply);
             if (direction is "both" or "accepts") Side("Takes", compat.AcceptsTotal, compat.Accepts, shown, reply);
-            reply.Append($"All of them: find_components(fitsComponentId: \"{cid}\")");
+            reply.Append($"All of them: find_components(fitsComponentId: \"{cid}\", fitDirection: \"{direction}\")");
             return reply.ToString();
+        });
+
+    [McpServerTool(Name = "find_adapter_chain"), Description(
+        "Finds a shortest compatible chain between two catalogue components, in either order. " +
+        "Resolve each part number with find_components first. Returns the selected components and any intermediate adapters, machine end first.")]
+    public Task<string> FindAdapterChain(string firstComponentId, string secondComponentId) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            if (Ids.Of(firstComponentId) is not { } first) return Ids.NotAComponent(firstComponentId);
+            if (Ids.Of(secondComponentId) is not { } second) return Ids.NotAComponent(secondComponentId);
+            if (first == second) return "ERROR: choose two different components";
+            var chain = await api.GetAdapterChain(first, second, token);
+            if (chain.Count == 0) return "No chain of adapters with matching connection data was found in the catalogues you can see.";
+            var result = new StringBuilder(chain.Count == 2 ? "Direct fit." : $"Fits with {chain.Count - 2} intermediate adapter(s).");
+            foreach (var component in chain) result.AppendLine().Append(Replies.Line(component));
+            return result.ToString();
+        });
+
+    [McpServerTool(Name = "get_cutting_data"), Description(
+        "Reads the maker's cutting data for a component. Includes material groups, cutting speed, spindle speed, " +
+        "feeds by operation, engagement conditions and the table source when available.")]
+    public Task<string> GetCuttingData(string id,
+        [Description("Optional part of a material group name in the manufacturer's language, or a material number")] string? material = null) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
+            var data = await api.GetCuttingData(cid, token);
+            if (data == null) return "No manufacturer's cutting table is available for this component in your catalogue.";
+            string filter = material?.Trim() ?? "";
+            var rows = data.Rows.Where(r => r.Group.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || r.Numbers.Contains(filter, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (rows.Count == 0) return "No matching material. Table groups: " + string.Join(", ", data.Rows.Select(r => r.Group).Distinct());
+            var result = new StringBuilder($"Series {data.Series}; tool Ø{Replies.Mm(data.ToolDiameterMm)} mm; " +
+                $"feed table column Ø{Replies.Mm(data.TableDiameterMm)} mm.");
+            if (data.Source != null) result.AppendLine().Append("Source: " + data.Source);
+            foreach (var row in rows)
+            {
+                result.AppendLine().Append(row.Group);
+                if (row.Numbers.Count > 0) result.Append(" (" + string.Join(", ", row.Numbers) + ")");
+                if (!string.IsNullOrEmpty(row.Hardness)) result.Append(", " + row.Hardness);
+                result.Append($": Vc {Replies.Mm(row.Vc)} m/min, {row.Rpm} rpm");
+                foreach (var (way, feed) in row.Fz)
+                {
+                    result.AppendLine().Append($"  {way}: {feed.ToString("G", System.Globalization.CultureInfo.InvariantCulture)} mm/tooth");
+                    if (row.Vf.TryGetValue(way, out long vf)) result.Append($", {vf} mm/min");
+                }
+            }
+            foreach (var (way, condition) in data.Engagement) result.AppendLine().Append($"{way}: {condition}");
+            if (!string.IsNullOrWhiteSpace(data.Notes)) result.AppendLine().Append(data.Notes);
+            return result.ToString();
         });
 
     [McpServerTool(Name = "assemble_to_spindle"), Description(

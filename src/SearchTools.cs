@@ -46,19 +46,22 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
         [Description("A thread the part cuts: M10, M10x1.5, MF14x1.5, 1/4-20 UNC, #10-32, G 1/2")] string? thread = null,
         [Description("The thread's pitch, mm, e.g. 1.5")] double? pitchMm = null,
         [Description("The query is a whole part number: 12212 is 12212, not 1221234 - give the maker too")]
-        bool exact = false) =>
+        bool exact = false,
+        [Description("With fitsComponentId: holders it goes into, accepts for what it takes, or both")] string fitDirection = "both") =>
         Replies.WithToken(tokens, async token =>
         {
             if (!string.IsNullOrWhiteSpace(sort) && !Sorts.Contains(sort)) return "ERROR: sort is name, diameter or length";
             string? fits = null;
             if (!string.IsNullOrWhiteSpace(fitsComponentId) && (fits = Ids.Of(fitsComponentId)) == null)
                 return Ids.NotAComponent(fitsComponentId);
+            if (fitDirection is not ("both" or "holders" or "accepts") || (fits == null && fitDirection != "both"))
+                return "ERROR: fitDirection requires fitsComponentId and is holders, accepts or both";
             int size = Math.Clamp(pageSize, 1, MaxPageSize);
             var search = new ComponentQuery(query, kit, classCode, family, machineType, maker, coating, coolant, shank,
                 minDiameterMm, maxDiameterMm, fits, buildableOnly ? true : null, encyVersion,
                 string.IsNullOrWhiteSpace(sort) ? null : sort,
                 descending, Math.Max(0, page), size, string.IsNullOrWhiteSpace(thread) ? null : thread.Trim(),
-                pitchMm is > 0 ? pitchMm : null, exact);
+                pitchMm is > 0 ? pitchMm : null, exact, fitDirection == "both" ? null : fitDirection);
             var found = await api.FindComponents(search, token);
             var counts = found.Items.Count == 0
                 ? new Dictionary<string, CompatCounts>()
@@ -78,7 +81,12 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
                 reply.AppendLine();
             }
             if (found.Total == 0) reply.AppendLine("search_options shows what these filters can take.");
-            if (found.Page + 1 < pages) reply.Append($"Next page: page={found.Page + 1}. ");
+            if (found.Page + 1 < pages)
+            {
+                reply.Append($"Next page: repeat find_components with the same filters and page={found.Page + 1}");
+                if (fits != null) reply.Append($" (fitsComponentId=\"{fits}\", fitDirection=\"{fitDirection}\")");
+                reply.Append(". ");
+            }
             reply.Append("describe_component(id) for parameters, what_fits(id) for what goes with it.");
             return reply.ToString();
         });

@@ -34,6 +34,34 @@ public class ComponentToolsTests : IDisposable
         Assert.Contains("Connection: Capto C6; goes into 4, takes 12", reply);
     }
 
+    [Fact]
+    public async Task CuttingDataKeepsTheMaterialSourceUnitsAndEngagementTogether()
+    {
+        var feeds = new Dictionary<string, double> { ["Slot"] = 0.0239 };
+        var speeds = new Dictionary<string, long> { ["Slot"] = 191 };
+        _api.Cutting = new CuttingData("SER", "maker.pdf", 6, 5.9, 2, ["Slot"],
+            [new("STEEL", "180 HB", ["1.0503"], 100, 4000, feeds, speeds),
+             new("ALUMINIUM", null, [], 200, 8000, feeds, speeds)], new Dictionary<string,string> { ["Slot"] = "Full slot" }, null);
+        var reply = await Tools().GetCuttingData(G("c1"), "1.0503");
+        foreach (var term in new[]{"maker.pdf", "STEEL", "180 HB", "0.0239 mm/tooth", "191 mm/min", "Full slot", "4000 rpm"})
+            Assert.Contains(term, reply);
+        Assert.DoesNotContain("ALUMINIUM", reply);
+        Assert.Contains("No matching material", await Tools().GetCuttingData(G("c1"), "Titanium"));
+    }
+
+    [Fact]
+    public async Task AdapterChainReportsTheOrderedIdsAndUnmatchedComponents()
+    {
+        string a = G("c1"), b = G("c2"), adapter = G("h1");
+        _api.AdapterChain = [Holder(a, "First"), Holder(adapter, "Bridge"), Holder(b, "Last")];
+        string reply = await Tools().FindAdapterChain(b, a);
+        Assert.Contains("1 intermediate adapter", reply);
+        Assert.True(reply.IndexOf(a, StringComparison.Ordinal) < reply.IndexOf(adapter, StringComparison.Ordinal));
+        Assert.True(reply.IndexOf(adapter, StringComparison.Ordinal) < reply.IndexOf(b, StringComparison.Ordinal));
+        _api.AdapterChain = [];
+        Assert.Contains("No chain", await Tools().FindAdapterChain(a, b));
+    }
+
     /** An id that names nothing and an expired sign-in call for different things: a new search, or a new sign-in. */
     [Fact]
     public async Task AnUnknownIdIsNotFoundNotASignInProblem()
@@ -55,7 +83,7 @@ public class ComponentToolsTests : IDisposable
 
         Assert.Contains("Goes into 37", reply);
         Assert.Contains($"DCLNL 2525M 12 [id {G("h1")}]", reply);
-        Assert.EndsWith($"All of them: find_components(fitsComponentId: \"{G("c2")}\")", reply);
+        Assert.EndsWith($"All of them: find_components(fitsComponentId: \"{G("c2")}\", fitDirection: \"holders\")", reply);
         Assert.Equal("ERROR: direction is both, holders or accepts", await Tools().WhatFits(G("c2"), "sideways"));
     }
 

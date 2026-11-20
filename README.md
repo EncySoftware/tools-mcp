@@ -8,7 +8,7 @@ person's account, checks what fits what, and puts the tools into a library in th
 that library through the Tools catalogue extension. It is the tools.encycam.com counterpart of
 [dmc-mcp](https://github.com/EncySoftware/dmc-mcp).
 
-Status: 0.5.2. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
+Status: 0.6.0. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
 
 | Tool | What it does |
 |---|---|
@@ -35,7 +35,11 @@ Status: 0.5.2. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0,
 | `rename_library` | Renames a library. |
 | `delete_library` | Deletes a library for good. Only on the person's explicit request. |
 | `export_library` | Saves a library as one `.mKit`. |
-| `export_tool_list` | Saves a library's assemblies as ENCY's tool list (`.tom`): each one tool, built, numbered, reaching as far as measured. In ENCY: Tools, Load existing tool list. |
+| `export_tool_list` | Saves the library's ENCY tool list as a `.tom` file and reports how many assemblies were exported or omitted. |
+| `export_assembly` | Downloads one saved assembly as an ENCY `.sc12tool` file. |
+| `update_assembly` | Changes the name, T number, place, spindle or measured gauge length of a saved assembly. |
+| `find_adapter_chain` | Finds a direct fit or a shortest chain of catalogued adapters between two component IDs, in either order. Resolve part numbers with `find_components` first. |
+| `get_cutting_data` | Reads the manufacturer's cutting table for a component, optionally filtered by material group or material number. |
 
 Every reply that leaves something in a library ends with how to open it in ENCY: the Tools catalogue extension
 lists the account's libraries.

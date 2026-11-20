@@ -56,6 +56,12 @@ public record LibraryItem(string? Component, string? Name, string? Kit, bool Pre
 public record Library(string Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<LibraryItem> Items);
 public record LibrarySummary(string Id, string Name, int ItemCount, int MissingCount, DateTimeOffset UpdatedAt);
 public record DownloadedFile(string FileName, byte[] Bytes);
+public record ToolListExport(DownloadedFile File, int? Exported, int? LeftOut);
+public record AssemblyPatch(string? Name, string? Number, string? Place, string? Spindle, double? GaugeLengthMm);
+public record CuttingRow(string Group, string? Hardness, IReadOnlyList<string> Numbers, double Vc, long Rpm,
+    IReadOnlyDictionary<string,double> Fz, IReadOnlyDictionary<string,long> Vf);
+public record CuttingData(string Series, string? Source, double TableDiameterMm, double ToolDiameterMm, int? Flutes,
+    IReadOnlyList<string> Ways, IReadOnlyList<CuttingRow> Rows, IReadOnlyDictionary<string,string> Engagement, string? Notes);
 /// <summary>Picks as a GTC package, and how many of them had no place in it: our own parts, a row with no GTC class.</summary>
 public record GtcPackage(DownloadedFile File, int LeftOut);
 public enum ComponentFileKind { Model, Drawing, Picture }
@@ -65,7 +71,7 @@ public record ComponentQuery(string? Query = null, string? Kit = null, string? C
     string? MachineType = null, string? Maker = null, string? Coating = null, string? Coolant = null, string? Shank = null,
     double? MinDiameterMm = null, double? MaxDiameterMm = null, string? Fits = null, bool? Buildable = null,
     int? EncyVersion = null, string? Sort = null, bool Descending = false, int Page = 0, int Size = 20,
-    string? Thread = null, double? PitchMm = null, bool Exact = false);
+    string? Thread = null, double? PitchMm = null, bool Exact = false, string? FitDirection = null);
 
 /// <summary>Every route of tools.encycam.com, called as the person signed in.</summary>
 public interface IToolsApi
@@ -81,6 +87,8 @@ public interface IToolsApi
     Task<FilterValues> GetFilterValues(ComponentQuery query, string token);
     Task<ComponentDetail?> GetComponent(string id, string token);
     Task<Compat?> GetCompat(string id, string token);
+    Task<IReadOnlyList<Component>> GetAdapterChain(string first, string second, string token);
+    Task<CuttingData?> GetCuttingData(string id, string token);
     /** spindle: the machine's, as ENCY's connection library names it (HSK63, SK40, Capto C6); null for any. */
     Task<AssemblyChain?> GetAssembly(string id, string? spindle, string token);
     Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetAcceptsAmong(IReadOnlyList<string> ids, string token);
@@ -96,7 +104,9 @@ public interface IToolsApi
     Task<Library> RenameLibrary(string id, string name, string token);
     Task DeleteLibrary(string id, string token);
     Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token);
-    Task<DownloadedFile> ExportToolList(string id, string token);
+    Task<ToolListExport> ExportToolList(string id, string token);
+    Task<Library> UpdateAssembly(string library, string assembly, AssemblyPatch patch, string token);
+    Task<DownloadedFile> ExportAssembly(string library, string assembly, string token);
 }
 
 public class ToolsApi : IToolsApi
@@ -175,6 +185,12 @@ public class ToolsApi : IToolsApi
     public Task<Compat?> GetCompat(string id, string token) =>
         GetOrNull<Compat>("/components/" + Esc(id) + "/compat", token);
 
+    public Task<IReadOnlyList<Component>> GetAdapterChain(string first, string second, string token) =>
+        Get<IReadOnlyList<Component>>($"/components/{Esc(first)}/adapter-chain/{Esc(second)}", token);
+
+    public Task<CuttingData?> GetCuttingData(string id, string token) =>
+        GetOrNull<CuttingData>($"/components/{Esc(id)}/cutting", token);
+
     public Task<AssemblyChain?> GetAssembly(string id, string? spindle, string token) =>
         GetOrNull<AssemblyChain>("/components/" + Esc(id) + "/assembly" + Params(("spindle", spindle)), token);
 
@@ -243,8 +259,20 @@ public class ToolsApi : IToolsApi
     public async Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token) =>
         await FileOf(await SendForFile(HttpMethod.Post, "/me/libraries/" + Esc(id) + "/pull", token, new { sockets }), "Library.mKit");
 
-    public async Task<DownloadedFile> ExportToolList(string id, string token) =>
-        await FileOf(await SendForFile(HttpMethod.Get, "/me/libraries/" + Esc(id) + "/tools.tom", token), "Tools.tom");
+    public async Task<ToolListExport> ExportToolList(string id, string token)
+    {
+        var response = await SendForFile(HttpMethod.Get, "/me/libraries/" + Esc(id) + "/tools.tom", token);
+        int? Count(string header) => response.Headers.TryGetValues(header, out var values)
+            && int.TryParse(values.FirstOrDefault(), NumberStyles.None, CultureInfo.InvariantCulture, out int n) ? n : null;
+        int? exported = Count("X-Exported"), leftOut = Count("X-Left-Out");
+        return new ToolListExport(await FileOf(response, "Tools.tom"), exported, leftOut);
+    }
+
+    public Task<Library> UpdateAssembly(string library, string assembly, AssemblyPatch patch, string token) =>
+        Send<Library>(HttpMethod.Put, $"/me/libraries/{Esc(library)}/assemblies/{Esc(assembly)}", token, patch);
+
+    public async Task<DownloadedFile> ExportAssembly(string library, string assembly, string token) =>
+        await FileOf(await SendForFile(HttpMethod.Get, $"/me/libraries/{Esc(library)}/assemblies/{Esc(assembly)}/tool.sc12tool", token), "Tool.sc12tool");
 
     // ------------------------------------------------------------------ plumbing
 
@@ -346,7 +374,7 @@ public class ToolsApi : IToolsApi
             ("maker", q.Maker), ("coating", q.Coating), ("coolant", q.Coolant), ("shank", q.Shank),
             ("minDiameter", q.MinDiameterMm), ("maxDiameter", q.MaxDiameterMm), ("fits", q.Fits),
             ("pullable", q.Buildable), ("ency", q.EncyVersion), ("thread", q.Thread), ("pitch", q.PitchMm),
-            ("exact", q.Exact ? true : null),
+            ("exact", q.Exact ? true : null), ("fitDirection", q.FitDirection),
         };
         if (paging)
         {

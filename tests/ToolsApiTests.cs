@@ -50,6 +50,26 @@ public class ToolsApiTests
     }
 
     [Fact]
+    public async Task AssemblyRoutesUseExactIdsPatchOnlyRequestedFieldsAndReadExportCounts()
+    {
+        var stub = new StubHandler().OnJson("PUT", "/api/me/libraries/L1/assemblies/A1", Library)
+            .On("GET", "/api/me/libraries/L1/assemblies/A1/tool.sc12tool", HttpStatusCode.OK, "one")
+            .On("GET", "/api/me/libraries/L1/tools.tom", HttpStatusCode.OK, "list",
+                headers: new Dictionary<string, string> { ["X-Exported"] = "8", ["X-Left-Out"] = "2" });
+        var api = StubHandler.Api(stub);
+        await api.UpdateAssembly("L1", "A1", new AssemblyPatch(null, "T15", null, null, 0), "t");
+        var body = System.Text.Json.Nodes.JsonNode.Parse(stub.Requests[0].Body!)!.AsObject();
+        Assert.Equal(2, body.Count);
+        Assert.Equal("T15", (string?)body["number"]);
+        Assert.Equal(0, (double?)body["gaugeLengthMm"]);
+        Assert.EndsWith(".sc12tool", (await api.ExportAssembly("L1", "A1", "t")).FileName);
+        var export = await api.ExportToolList("L1", "t");
+        Assert.Equal(8, export.Exported);
+        Assert.Equal(2, export.LeftOut);
+        Assert.All(stub.Requests, r => Assert.Equal("Bearer t", r.Authorization));
+    }
+
+    [Fact]
     public async Task AnExpiredSignInIsAnHttpErrorWithItsStatus()
     {
         var stub = new StubHandler().On("GET", "/api/kits", HttpStatusCode.Unauthorized);

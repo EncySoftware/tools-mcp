@@ -135,7 +135,23 @@ public class AssemblyToolsTests : IDisposable
         string reply = await new LibraryTools(_api, new FakeTokens()).ExportToolList(G("L1"), folder: _folder);
 
         Assert.Contains("DMU 50.tom", reply);
+        Assert.Contains("Exported 8 of 10 assemblies; 2 omitted", reply);
         Assert.Contains("Load existing tool list", reply);
         Assert.True(File.Exists(Path.Combine(_folder, "DMU 50.tom")));
+    }
+
+    [Fact]
+    public async Task EditingAnAssemblyKeepsItsPartsAndItCanBeExportedAlone()
+    {
+        Shelf();
+        var tools = Tools();
+        await tools.CreateAssembly(G("L1"), [G("c1"), G("d1")], number: "T12", place: "pocket 3");
+        var original = Assert.Single(_api.Libraries[G("L1")].Items).Assembly!;
+        string edited = await tools.UpdateAssembly(G("L1"), original.Id, number: "T15", gaugeLengthMm: 80);
+        Assert.Contains("T15", edited);
+        Assert.Contains("pocket 3", edited);
+        Assert.Equal(original.Parts, Assert.Single(_api.Libraries[G("L1")].Items).Assembly!.Parts);
+        await tools.ExportAssembly(G("L1"), original.Id, _folder);
+        Assert.Equal(new byte[]{42}, File.ReadAllBytes(Path.Combine(_folder, "T15.sc12tool")));
     }
 }

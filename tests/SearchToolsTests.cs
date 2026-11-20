@@ -51,6 +51,18 @@ public class SearchToolsTests
         Assert.DoesNotContain("no connection", reply);
     }
 
+    [Theory]
+    [InlineData("holders")]
+    [InlineData("accepts")]
+    public async Task PagingAFitSearchRetainsTheAnchorAndDirection(string direction)
+    {
+        var id = G("c1");
+        _api.Page = new ComponentsPage(5, 1, 1, []);
+        string reply = await Tools().FindComponents(fitsComponentId: id, fitDirection: direction, page: 1, pageSize: 1);
+        Assert.Equal(direction, _api.LastQuery!.FitDirection);
+        Assert.Contains($"page=2 (fitsComponentId=\"{id}\", fitDirection=\"{direction}\")", reply);
+    }
+
     /** SA-11: a thread and a part number from a setup sheet go to the site as they were asked. */
     [Fact]
     public async Task AThreadAPitchAndAnExactNumberGoToTheSite()

@@ -65,6 +65,18 @@ internal sealed class FakeToolsApi : IToolsApi
     public Dictionary<string, ComponentDetail> Components { get; } = new();
     public Dictionary<string, Compat> Compats { get; } = new();
     public Dictionary<string, AssemblyChain> Assemblies { get; } = new();
+    public IReadOnlyList<Component> AdapterChain { get; set; } = [];
+    public CuttingData? Cutting { get; set; }
+    public Task<IReadOnlyList<Component>> GetAdapterChain(string first, string second, string token)
+    {
+        Saw(nameof(GetAdapterChain), token);
+        return Task.FromResult(AdapterChain);
+    }
+    public Task<CuttingData?> GetCuttingData(string id, string token)
+    {
+        Saw(nameof(GetCuttingData), token);
+        return Task.FromResult(Cutting);
+    }
     public Dictionary<string, IReadOnlyList<string>> Accepts { get; } = new();
     public Dictionary<(string Id, ComponentFileKind Kind), DownloadedFile> ComponentFiles { get; } = new();
 
@@ -218,10 +230,27 @@ internal sealed class FakeToolsApi : IToolsApi
         return Task.CompletedTask;
     }
 
-    public Task<DownloadedFile> ExportToolList(string id, string token)
+    public Task<ToolListExport> ExportToolList(string id, string token)
     {
         Saw(nameof(ExportToolList), token);
-        return Task.FromResult(new DownloadedFile(Libraries[id].Name + ".tom", [7]));
+        return Task.FromResult(new ToolListExport(new DownloadedFile(Libraries[id].Name + ".tom", [7]), 8, 2));
+    }
+
+    public Task<Library> UpdateAssembly(string library, string assembly, AssemblyPatch patch, string token)
+    {
+        Saw(nameof(UpdateAssembly), token);
+        var shelf = Libraries[library];
+        var rows = shelf.Items.Select(i => i.Assembly?.Id == assembly
+            ? i with { Name = patch.Name ?? i.Name, Assembly = i.Assembly with { Number = patch.Number ?? i.Assembly.Number,
+                Place = patch.Place ?? i.Assembly.Place, GaugeLengthMm = patch.GaugeLengthMm ?? i.Assembly.GaugeLengthMm,
+                Spindle = patch.Spindle ?? i.Assembly.Spindle } } : i).ToList();
+        return Task.FromResult(Libraries[library] = shelf with { Items = rows });
+    }
+
+    public Task<DownloadedFile> ExportAssembly(string library, string assembly, string token)
+    {
+        Saw(nameof(ExportAssembly), token);
+        return Task.FromResult(new DownloadedFile("T15.sc12tool", [42]));
     }
 
     public Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token)

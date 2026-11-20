@@ -127,9 +127,41 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         {
             _files.Check(folder);
             if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
-            var file = await api.ExportToolList(lid, token);
-            return $"{_files.Deliver(file, folder)}. In ENCY: Tools, Load existing tool list, then pick the file - each " +
-                   "assembly comes in as one tool with its T number.";
+            var export = await api.ExportToolList(lid, token);
+            string counts = (export.Exported, export.LeftOut) switch
+            {
+                (int saved, int omitted) => $"Exported {saved} of {saved + omitted} assemblies; {omitted} omitted.",
+                (_, int omitted) => $"{omitted} assemblies omitted.",
+                _ => "The server did not report how many assemblies were exported."
+            };
+            return $"{_files.Deliver(export.File, folder)}. {counts} In ENCY: Tools, Load existing tool list.";
+        });
+
+    [McpServerTool(Name = "update_assembly"), Description(
+        "Edits a saved assembly in place. Give only the fields to change. The assembly id is in show_library.")]
+    public Task<string> UpdateAssembly(string libraryId, string assemblyId, string? number = null,
+        string? name = null, string? place = null, [Description("MAIN or SUB; empty to clear")] string? spindle = null,
+        [Description("Measured gauge length in mm; zero to clear")] double? gaugeLengthMm = null) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            if (Ids.Of(libraryId) is not { } lib) return Ids.NotALibrary(libraryId);
+            if (Ids.Of(assemblyId) is not { } aid) return $"ERROR: '{assemblyId}' is not an assembly id - see show_library";
+            if (number == null && name == null && place == null && spindle == null && gaugeLengthMm == null)
+                return "ERROR: specify at least one assembly field to change";
+            var updated = await api.UpdateAssembly(lib, aid, new AssemblyPatch(name, number, place, spindle, gaugeLengthMm), token);
+            return "Updated " + Assembly(updated.Items.Single(item => item.Assembly?.Id == aid));
+        });
+
+    [McpServerTool(Name = "export_assembly"), Description(
+        "Saves one assembly as an ENCY .sc12tool file. Get the library id and assembly id from list_libraries and show_library.")]
+    public Task<string> ExportAssembly(string libraryId, string assemblyId,
+        [Description("Local download folder; omit on the hosted server")] string? folder = null) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            if (Ids.Of(libraryId) is not { } lib) return Ids.NotALibrary(libraryId);
+            if (Ids.Of(assemblyId) is not { } aid) return $"ERROR: '{assemblyId}' is not an assembly id - see show_library";
+            _files.Check(folder);
+            return _files.Deliver(await api.ExportAssembly(lib, aid, token), folder);
         });
 
     [McpServerTool(Name = "remove_from_library"), Description(
