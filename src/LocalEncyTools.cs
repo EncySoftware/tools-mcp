@@ -24,6 +24,28 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     public Task<string> ListToolOperations(int processId, string magazine, int position) =>
         Run("operations", processId, [magazine, position.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
 
+    [McpServerTool(Name = "apply_operation_cutting"), Description(
+        "Apply a supplier's speed and feed from one article condition to a named ENCY operation. " +
+        "Use get_cutting_data for the condition number and list_tool_operations for the operation id. " +
+        "Supply the active operation's displayed measurement system (metric or imperial), the exact speed and feed units from the row, " +
+        "and either minimum or maximum. Changes the open project without saving it.")]
+    public Task<string> ApplyOperationCutting(string id, int condition, string boundary, string speedUnit,
+        string feedUnit, int processId, string projectPath, string operationId, string operationUnits) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
+            if (boundary is not ("minimum" or "maximum") || operationUnits is not ("metric" or "imperial"))
+                return "ERROR: specify minimum or maximum, and the operation units (metric or imperial).";
+            var rows = (await api.GetCompat(cid, token))?.ArticleCutting;
+            if (rows == null || condition < 1 || condition > rows.Count) return "ERROR: unknown article condition.";
+            var settings = CuttingSetting.FromArticle(rows[condition - 1].Fields, boundary == "maximum")
+                .Where(s => s.Unit == speedUnit || s.Unit == feedUnit).ToList();
+            if (!CuttingSetting.IsPair(settings) || speedUnit is not ("rpm" or "m/min"))
+                return "ERROR: select one available spindle or cutting speed and one available feed from the condition.";
+            return await Run("cutting", processId, [projectPath, operationId, operationUnits,
+                .. settings.SelectMany(s => new[] { s.Unit, s.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture) })]);
+        });
+
     [McpServerTool(Name = "install_shelf_in_project"), Description(
         "Imports a saved catalogue shelf into an open ENCY project in one call. Use a libraryId from list_libraries and the PID and exact project path from list_project_tools. Creates a component library, installs compatible tools, reports actual holders and positions. Does not save the project.")]
     public Task<string> InstallShelfInProject(string libraryId, int processId, string projectPath, string? magazine = null) =>

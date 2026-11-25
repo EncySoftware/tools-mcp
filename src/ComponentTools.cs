@@ -99,8 +99,8 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
             if (compat?.ArticleCutting is { Count: > 0 } article)
             {
                 var query = material?.Trim() ?? "";
-                var matches = article.Where(r => r.Material.Contains(query, StringComparison.OrdinalIgnoreCase)
-                    || r.Fields.Any(f => f.Length == 2 && f[0].Contains("material", StringComparison.OrdinalIgnoreCase)
+                var matches = article.Select((row, index) => (row, condition: index + 1)).Where(entry => entry.row.Material.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || entry.row.Fields.Any(f => f.Length == 2 && f[0].Contains("material", StringComparison.OrdinalIgnoreCase)
                         && f[1].Contains(query, StringComparison.OrdinalIgnoreCase))).ToArray();
                 if (matches.Length == 0)
                     return "No matching material. Available: " + string.Join(", ", article.Select(r => r.Material).Distinct());
@@ -108,9 +108,9 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
                 int pages = (matches.Length - 1) / size + 1;
                 if (page > pages) return $"ERROR: select an article table page from 1 to {pages}.";
                 var answer = new StringBuilder($"Supplier cutting conditions: {matches.Length}; page {page}/{pages}.");
-                foreach (var row in matches.Skip((page - 1) * size).Take(size))
+                foreach (var (row, condition) in matches.Skip((page - 1) * size).Take(size))
                 {
-                    answer.AppendLine().AppendLine().Append(row.Material);
+                    answer.AppendLine().AppendLine().Append($"Condition {condition}: ").Append(row.Material);
                     if (!string.IsNullOrWhiteSpace(row.Operation)) answer.Append(" · " + row.Operation);
                     if (!string.IsNullOrWhiteSpace(row.Label)) answer.Append(" · " + row.Label);
                     foreach (var field in row.Fields.Where(f => f.Length == 2))

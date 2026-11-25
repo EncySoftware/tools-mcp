@@ -28,7 +28,7 @@ internal static class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -61,6 +61,29 @@ internal static class EncyIpc
             var app = helper.Object("GetRunningCamApp", pid);
             var project = app.Object("GetActiveProject");
             var path = project.Text("GetFilePath");
+            if (args[0] == "cutting")
+            {
+                if (string.IsNullOrWhiteSpace(path) || !string.Equals(path, args[2], StringComparison.OrdinalIgnoreCase)
+                    || string.IsNullOrWhiteSpace(args[3]) || args[4] is not ("metric" or "imperial"))
+                    throw new ArgumentException("Verify the project path, operation id and measurement system.");
+                var operation = project.Object("GetTechnologist").Object("GetOperationById", args[3]);
+                if (!string.Equals(operation.Text("GetId"), args[3], StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Operation id changed.");
+                var xml = operation.Object("get_XMLProp");
+                bool Exists(string key) => Convert.ToBoolean(xml.Call("get_PropExists", [key]).Value);
+                var settings = new List<CuttingSetting>();
+                for (int i = 5; i < args.Length; i += 2)
+                {
+                    double value = double.Parse(args[i + 1], System.Globalization.CultureInfo.InvariantCulture);
+                    settings.Add(new(args[i], value));
+                }
+                CuttingSetting.Apply(settings, Exists("ConditionsSection.Spindle.Speed.Mode"), args[4] == "imperial",
+                    Exists, key => xml.Count("GetInteger", key), (key,v) => xml.Call("SetInteger", [key, v]),
+                    key => Convert.ToDouble(xml.Call("GetFloat", [key]).Value), (key,v) => xml.Call("SetFloat", [key, v]),
+                    () => operation.Call("LoadFromXmlProp", [xml.Value]));
+                Console.WriteLine($"{operation.Text("GetName")} [{args[3]}]: {string.Join(", ", settings)}");
+                return 0;
+            }
             var tools = project.Object("get_MachineTools");
             var reply = new StringBuilder().AppendLine($"ENCY PID {pid} | Project: {path}");
             if (args[0] == "list")
