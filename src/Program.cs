@@ -8,6 +8,9 @@ using ToolsMcp;
 if (args.Length > 0)
     Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+if (args.FirstOrDefault() == "--ency-ipc" && OperatingSystem.IsWindows())
+    return EncyIpc.Execute(args[1..]);
+
 // `tools-mcp login`: a one-time sign-in to tools.encycam.com through the browser (MCP is not involved).
 if (args.Length > 0 && args[0].Equals("login", StringComparison.OrdinalIgnoreCase))
     return await new TokenProvider().LoginBrowser();
@@ -48,7 +51,7 @@ builder.Services.AddSingleton<IToolsApi, ToolsApi>();
 builder.Services.AddSingleton<TokenProvider>();
 builder.Services.AddSingleton<IFileSink>(LocalFiles.Instance);
 
-builder.Services
+var mcp = builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithTools<CatalogueTools>()
@@ -56,6 +59,8 @@ builder.Services
     .WithTools<ComponentTools>()
     .WithTools<BuildTools>()
     .WithTools<LibraryTools>();
+
+if (OperatingSystem.IsWindows()) mcp.WithTools<LocalEncyTools>();
 
 await builder.Build().RunAsync();
 return 0;

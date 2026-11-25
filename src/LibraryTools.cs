@@ -216,6 +216,26 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
             return $"Deleted '{library.Name}'.";
         });
 
+    [McpServerTool(Name = "export_shelf_gtc"), Description(
+        "Builds one GTC zip from the catalogue parts in a shelf's saved assemblies, like Tools catalogue → Add to project. Gives a download or local file; use import_project_gtc locally or Equipment → Load GTC in ENCY.")]
+    public Task<string> ExportShelfGtc(string id, string? folder = null) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
+            _files.Check(folder);
+            var library = await api.GetLibrary(lid, token);
+            if (library == null) return NoLibrary(lid);
+            var parts = library.Items.Where(i => i.Assembly != null).SelectMany(i => i.Assembly!.Parts).ToList();
+            var ids = parts.Where(p => p.Present && p.Component != null).Select(p => p.Component!)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (ids.Count == 0) return "ERROR: the saved assemblies have no available catalogue components.";
+            if (ids.Count > 500) return "ERROR: a GTC package holds at most 500 distinct components.";
+            var gtc = await api.BuildGtcPackage(library.Name, ids, token);
+            var unavailable = parts.Count(p => !p.Present || p.Component == null);
+            return $"{_files.Deliver(gtc.File, folder)}. Packaged {ids.Count - gtc.LeftOut}/{ids.Count} catalogue components. "
+                   + $"Missing or custom part entries: {unavailable}. " + BuildTools.GtcHint;
+        });
+
     [McpServerTool(Name = "export_library"), Description(
         "Saves a library as one .mKit on the person's disk - for when they want a file rather than opening the " +
         "library in ENCY through the extension.")]
@@ -366,7 +386,7 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         var a = item.Assembly!;
         var text = new StringBuilder();
         if (a.Number != null) text.Append(a.Number + " ");
-        text.Append(item.Name + ": " + string.Join(" -> ", a.Parts.Select(p => p.Custom is { } c ? Custom(c) : p.Name)));
+        text.Append(item.Name + ": " + string.Join(" -> ", a.Parts.Select(p => p.Custom is { } c ? Custom(c) : PartName(p))));
         if (a.Place != null) text.Append(" · " + a.Place);
         if (a.Spindle != null) text.Append($" · {a.Spindle} spindle");
         if (a.GaugeLengthMm is { } g) text.Append($" · gauge {Replies.Mm(g)} mm");
@@ -388,6 +408,17 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
 
     private static string NoLibrary(string id) => $"ERROR: no library {id}";
 
+    private static string PartName(LibraryItem item)
+    {
+        if (item.Reference is not { } r) return item.Name ?? "";
+        var text = new StringBuilder($"{item.Name} [article {r.Article}]");
+        if (r.OverallMm is double o) text.Append($", overall {Replies.Mm(o)} mm");
+        if (r.CornerRadiusMm is double rad) text.Append($", corner R{Replies.Mm(rad)} mm");
+        if (r.UsableMm is double u) text.Append($", usable {Replies.Mm(u)} mm");
+        else if (r.OutsideShankMm is double l) text.Append($", overall minus shank {Replies.Mm(l)} mm (calculated)");
+        return text.ToString();
+    }
+
     private static string Contents(Library library)
     {
         var reply = new StringBuilder($"'{library.Name}' [id {library.Id}] holds {library.Items.Count} items:");
@@ -404,9 +435,9 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
                 reply.Append("  " + Custom(t));
                 continue;
             }
-            reply.Append($"  {item.Name} - {item.KitName ?? item.Kit}");
+            reply.Append($"  {PartName(item)} - {item.KitName ?? item.Kit}");
             if (item.DiameterMm is { } d) reply.Append($", Ø{Replies.Mm(d)} mm");
-            if (item.LengthMm is { } l) reply.Append($", L {Replies.Mm(l)} mm");
+            if (item.Reference?.OverallMm == null && item.LengthMm is { } l) reply.Append($", L {Replies.Mm(l)} mm");
             reply.Append($" [id {item.Component}]");
             if (!item.Present) reply.Append(" - GONE from the catalogue");
         }

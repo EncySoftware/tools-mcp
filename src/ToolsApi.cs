@@ -52,7 +52,8 @@ public record LibraryEntry(string? Component = null, CustomTool? Custom = null, 
 public record LibraryAssembly(string Id, string? Number, string? Place, IReadOnlyList<LibraryItem> Parts,
     string? Spindle = null, double? GaugeLengthMm = null);
 public record LibraryItem(string? Component, string? Name, string? Kit, bool Present, string? Kind, string? KitName,
-    double? DiameterMm, double? LengthMm, CustomTool? Custom, LibraryAssembly? Assembly = null);
+    double? DiameterMm, double? LengthMm, CustomTool? Custom, LibraryAssembly? Assembly = null, CatalogueReference? Reference = null);
+public record CatalogueReference(string Article, double? OverallMm, double? UsableMm, double? OutsideShankMm, double? CornerRadiusMm);
 public record Library(string Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<LibraryItem> Items);
 public record LibrarySummary(string Id, string Name, int ItemCount, int MissingCount, DateTimeOffset UpdatedAt);
 public record DownloadedFile(string FileName, byte[] Bytes);

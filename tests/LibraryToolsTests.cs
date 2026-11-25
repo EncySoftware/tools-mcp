@@ -22,6 +22,24 @@ public class LibraryToolsTests : IDisposable
 
     /** A second "Turning" beside the first is a duplicate the person did not ask for. */
     [Fact]
+    public async Task ShelfGtcUsesDistinctAvailableAssemblyPartsAndReportsSkippedEntries()
+    {
+        var cutter = Item(G("cutter"), "Mill", true) with
+        { Reference = new CatalogueReference("52102127", 84, null, 39, 1.5) };
+        var assembly = new LibraryAssembly(G("a"), "T12", null, [cutter, cutter, Item(G("gone"), "Gone", false)]);
+        _api.Libraries[G("shelf")] = Lib(G("shelf"), "Shelf", Item(G("loose"), "Loose drill", true),
+            new LibraryItem(null, "Assembly", null, true, null, null, null, null, null, assembly));
+        string detail = await Tools().ShowLibrary(G("shelf"));
+        Assert.Contains("article 52102127", detail);
+        Assert.Contains("overall minus shank 39 mm (calculated)", detail);
+        string exported = await Tools().ExportShelfGtc(G("shelf"), _folder);
+        Assert.Contains("Packaged 1/1", exported);
+        Assert.Contains("Missing or custom part entries: 1", exported);
+        Assert.Equal(new[] { G("cutter") }, _api.LastGtc!.Value.Ids);
+        Assert.True(File.Exists(Path.Combine(_folder, "Shelf-gtc.zip")));
+    }
+
+    [Fact]
     public async Task CreateLibraryStopsAtASameNamedOne()
     {
         _api.Libraries[G("L9")] = Lib(G("L9"), "Turning");
@@ -43,7 +61,7 @@ public class LibraryToolsTests : IDisposable
         string reply = await Tools().AddToLibrary(G("L1"), componentIds: [G("c2")]);
 
         Assert.Contains("now holds 2 items (was 1)", reply);
-        Assert.EndsWith("In ENCY: the Tools catalogue extension lists your libraries - open it there.", reply);
+        Assert.EndsWith(Replies.InEncy, reply);
         Assert.StartsWith("ERROR:", await Tools().AddToLibrary(G("L1")));
     }
 

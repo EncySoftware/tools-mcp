@@ -8,7 +8,7 @@ person's account, checks what fits what, and puts the tools into a library in th
 that library through the Tools catalogue extension. It is the tools.encycam.com counterpart of
 [dmc-mcp](https://github.com/EncySoftware/dmc-mcp).
 
-Status: 0.6.0. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
+Version 0.7.0 adds shelf GTC export and direct magazine access in local Windows sessions. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
 
 | Tool | What it does |
 |---|---|
@@ -24,7 +24,7 @@ Status: 0.6.0. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0,
 | `check_fit` | Which of 2 to 50 hand-picked components takes which, checked before they are built. |
 | `save_component_file` | Saves the supplier's STEP model, drawing or photo, named after the component. |
 | `build_kit` | Builds the chosen components plus custom tools into one `.mKit` and saves it. Up to 500. An insert picked with the holder it seats in gives the holder its corner radius. |
-| `build_gtc_package` | The chosen components as a GTC package - ISO 13399 p21 data, 3D models and pictures - for a system that reads GTC rather than `.mKit`. Only supplier catalogues' components with a GTC class go in; our own are left out and counted. Up to 500. |
+| `build_gtc_package` | The chosen components as a GTC package - ISO 13399 p21 data, 3D models and pictures - for ENCY Equipment → Load GTC and other systems that read GTC. Only supplier catalogues' components with a GTC class go in; our own are left out and counted. Up to 500. |
 | `build_custom_tool` | A tool the catalogue lacks, built by its numbers as an `.mKit`: drill, end mill (with a corner radius), ball nose, torus, face mill, spot or centre drill, countersink, chamfer mill, tap, reamer. A size may be given as a setup sheet writes it (`1/4in`, `#7`, `F`) and a tap by its thread (`M10`, `1/4-20 UNC`). |
 | `list_libraries` | The person's libraries, with how many items each holds and how many of them are gone from the catalogue. |
 | `show_library` | What a library holds, marking items the supplier has since withdrawn. |
@@ -34,6 +34,9 @@ Status: 0.6.0. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0,
 | `remove_from_library` | Takes the named items out - components, custom tools, assemblies by their id - and keeps every other item as it is. Only on the person's request. |
 | `rename_library` | Renames a library. |
 | `delete_library` | Deletes a library for good. Only on the person's explicit request. |
+| `export_shelf_gtc` | Exports the available catalogue parts of saved assemblies to a GTC zip. |
+| `list_project_tools` | Local Windows stdio: read a running ENCY project's actual magazines, positions and tool captions. With multiple instances specify the process ID. |
+| `import_project_gtc` | Local Windows stdio: import a GTC zip (absolute path) into the indicated open project. Pass the PID and project path from `list_project_tools`. Reports the created library, actual slots and skipped tools. Save in ENCY to keep the changes. |
 | `export_library` | Saves a library as one `.mKit`. |
 | `export_tool_list` | Saves the library's ENCY tool list as a `.tom` file and reports how many assemblies were exported or omitted. |
 | `export_assembly` | Downloads one saved assembly as an ENCY `.sc12tool` file. |
@@ -130,7 +133,7 @@ never written over: a second `Kit.mKit` becomes `Kit (2).mKit`. The hosted serve
 
 ## Hosted server (for Hermes)
 
-`tools-mcp serve` runs the same tools over MCP Streamable HTTP, for an agent that cannot start a local process. On the
+`tools-mcp serve` runs the catalogue and shelf tools over MCP Streamable HTTP, for an agent that cannot start a local process. On the
 tools server it answers at **`https://tools.encycam.com/mcp`**.
 
 - **Every call is a person's.** It carries `Authorization: Bearer <access token>` of the person the agent works for: a

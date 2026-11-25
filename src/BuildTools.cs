@@ -73,11 +73,11 @@ public class BuildTools(IToolsApi api, TokenProvider tokens, IFileSink? files = 
                    + ImportHint;
         });
 
-    internal const string GtcHint = "A system that reads GTC imports it; ENCY takes build_kit's .mKit.";
+    internal const string GtcHint = "Import in ENCY advanced tools mode with Equipment → Load GTC, or use local import_project_gtc.";
 
     [McpServerTool(Name = "build_gtc_package"), Description(
         "Writes the chosen components as a GTC package - ISO 13399 p21 data with 3D models and pictures, for a CAM or " +
-        "tool management system that reads GTC rather than ENCY's .mKit - and saves it to the person's disk. Only " +
+        "tool management system that reads GTC, including ENCY's machine magazine - and saves it to the person's disk. Only " +
         "supplier catalogues' components with a GTC class go in; our own components are left out and counted. Parts " +
         "of several makers go in one package, each under its maker. 500 at most.")]
     public Task<string> BuildGtcPackage(

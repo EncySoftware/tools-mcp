@@ -142,7 +142,12 @@ public class ServeTests : IAsyncLifetime
         var anna = _realm.Token();
         Assert.Equal(HttpStatusCode.OK, (await http.SendAsync(Initialize(anna))).StatusCode);
         var list = await Answer(await http.SendAsync(Rpc("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""", anna)));
-        Assert.Equal(28, list.GetProperty("result").GetProperty("tools").GetArrayLength());
+        var names = list.GetProperty("result").GetProperty("tools").EnumerateArray()
+            .Select(t => t.GetProperty("name").GetString()).ToList();
+        Assert.Equal(29, names.Count);
+        Assert.Contains("export_shelf_gtc", names);
+        Assert.DoesNotContain("import_project_gtc", names);
+        Assert.DoesNotContain("list_project_tools", names);
     }
 
     [Fact]

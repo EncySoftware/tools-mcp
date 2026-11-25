@@ -9,7 +9,7 @@ namespace ToolsMcp;
 /// </summary>
 internal static class Replies
 {
-    public const string InEncy = "In ENCY: the Tools catalogue extension lists your libraries - open it there.";
+    public const string InEncy = "In ENCY: Tools catalogue → My warehouse → Add to project for assemblies or Install library for components.";
 
     /// <summary>Runs a tool's body with the person's token, and turns every way it can go wrong into a reply.</summary>
     public static async Task<string> WithToken(TokenProvider tokens, Func<string, Task<string>> body)
