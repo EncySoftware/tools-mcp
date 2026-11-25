@@ -28,7 +28,7 @@ internal static class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -76,6 +76,21 @@ internal static class EncyIpc
                         reply.AppendLine("  " + Tool(magazine.Object("GetTool", j)));
                 }
             }
+            else if (args[0] == "operations")
+            {
+                if (!int.TryParse(args[3], out var position) || position < 0)
+                    throw new ArgumentException("Specify a non-negative T position.");
+                var tool = FindTool(tools, args[2], position);
+                reply.AppendLine(Tool(tool));
+                var ids = tools.Strings("GetToolOperations", tool.Count("get_NodeID"));
+                reply.AppendLine($"Operations: {ids.Count}");
+                if (ids.Count > 0)
+                {
+                    var tech = project.Object("GetTechnologist");
+                    foreach (var id in ids)
+                        reply.AppendLine($"{tech.Object("GetOperationById", id).Text("GetName")} [{id}]");
+                }
+            }
             else
             {
                 if (!string.Equals(path, args[2], StringComparison.OrdinalIgnoreCase))
@@ -105,8 +120,32 @@ internal static class EncyIpc
         }
     }
 
-    private static string Tool(Handle node) =>
-        $"{node.Text("GetMagazineName")} T#{node.Count("GetPosition")} — {node.Text("GetCaption")}";
+    private static Handle FindTool(Handle tools, string name, int position)
+    {
+        int magazines = tools.Count("GetMagazinesCount");
+        for (int i = 0; i < magazines; i++)
+        {
+            var magazine = tools.Object("GetMagazine", i);
+            if (!string.Equals(magazine.Text("GetName"), name, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(magazine.Text("GetCaption"), name, StringComparison.OrdinalIgnoreCase)) continue;
+            var count = magazine.Count("GetToolsCount");
+            for (int j = 0; j < count; j++)
+            {
+                var node = magazine.Object("GetTool", j);
+                if (node.Count("GetPosition") == position) return node;
+            }
+            throw new ArgumentException($"{name} T#{position} has no installed tool.");
+        }
+        throw new ArgumentException($"No magazine named '{name}'. Use list_project_tools.");
+    }
+
+    private static string Tool(Handle node)
+    {
+        var caption = node.Text("GetCaption");
+        var slot = $"{node.Text("GetMagazineName")} T#{node.Count("GetPosition")}";
+        var adapters = node.Strings("GetAdapters");
+        return slot + " — " + string.Join(" → ", new[] { caption }.Concat(adapters));
+    }
 
     private sealed record Handle(object? Value, Type Type)
     {
@@ -141,6 +180,16 @@ internal static class EncyIpc
                 ? "The project has no machine magazine. Open a project in advanced tools mode."
                 : $"{name} returned no object.");
             return new(value, type);
+        }
+        public List<string> Strings(string name, params object?[] args)
+        {
+            var (value, type) = Call(name, args);
+            var result = new List<string>();
+            if (value == null) return result;
+            var list = new Handle(value, type);
+            int count = list.Count("Count");
+            for (int i = 0; i < count; i++) result.Add(list.Text("Get", i));
+            return result;
         }
         public string Text(string name, params object?[] args) => (string?)Call(name, args).Value ?? "";
         public int Count(string name, params object?[] args) => Convert.ToInt32(Call(name, args).Value);

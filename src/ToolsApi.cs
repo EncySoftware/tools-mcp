@@ -29,7 +29,9 @@ public record Component(string Id, string Name, string? Kind, string Section, do
 public record ComponentsPage(long Total, int Page, int Size, IReadOnlyList<Component> Items);
 public record ComponentDetail(Component Component, JsonObject? Params);
 public record Compat(string? PlugKey, string? PlugLabel, IReadOnlyList<Component> PlugsInto, long PlugsIntoTotal,
-    IReadOnlyList<string> SocketKeys, IReadOnlyList<Component> Accepts, long AcceptsTotal, JsonObject? Params);
+    IReadOnlyList<string> SocketKeys, IReadOnlyList<Component> Accepts, long AcceptsTotal, JsonObject? Params,
+    IReadOnlyList<ArticleCondition>? ArticleCutting = null);
+public record ArticleCondition(string Material, string Operation, string? Label, IReadOnlyList<string[]> Fields);
 public record AssemblyStep(Component Component, long Alternatives);
 public record AssemblyChain(IReadOnlyList<AssemblyStep> Steps, bool ReachesSpindle, string? StoppedBecause);
 /// <summary>What a part goes into and takes; Connected is false where its maker named no connection it stands on.</summary>

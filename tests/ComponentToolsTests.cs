@@ -50,6 +50,22 @@ public class ComponentToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task ArticleCuttingKeepsConditionsSeparateAndDoesNotConvertFeedUnits()
+    {
+        string id = G("horn");
+        var row = new ArticleCondition("P3 steel", "Grooving", null,
+            [new[] { "Feed per revolution", "min. 0.02 mm/rev ↔ max. 0.12 mm/rev" }]);
+        _api.Compats[id] = new Compat(null, null, [], 0, [], [], 0, null, Enumerable.Repeat(row, 11).ToList());
+        var reply = await Tools().GetCuttingData(id, "steel", 2);
+        Assert.Contains("page 2/2", reply);
+        Assert.Contains("Grooving", reply);
+        Assert.Contains("min. 0.02 mm/rev ↔ max. 0.12 mm/rev", reply);
+        Assert.DoesNotContain("mm/tooth", reply);
+        Assert.Contains("No matching material", await Tools().GetCuttingData(id, "aluminium"));
+        Assert.False(_api.Called(nameof(IToolsApi.GetCuttingData)));
+    }
+
+    [Fact]
     public async Task AdapterChainReportsTheOrderedIdsAndUnmatchedComponents()
     {
         string a = G("c1"), b = G("c2"), adapter = G("h1");

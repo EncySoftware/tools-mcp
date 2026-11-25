@@ -223,18 +223,22 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         {
             if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
             _files.Check(folder);
-            var library = await api.GetLibrary(lid, token);
-            if (library == null) return NoLibrary(lid);
-            var parts = library.Items.Where(i => i.Assembly != null).SelectMany(i => i.Assembly!.Parts).ToList();
-            var ids = parts.Where(p => p.Present && p.Component != null).Select(p => p.Component!)
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (ids.Count == 0) return "ERROR: the saved assemblies have no available catalogue components.";
-            if (ids.Count > 500) return "ERROR: a GTC package holds at most 500 distinct components.";
-            var gtc = await api.BuildGtcPackage(library.Name, ids, token);
-            var unavailable = parts.Count(p => !p.Present || p.Component == null);
-            return $"{_files.Deliver(gtc.File, folder)}. Packaged {ids.Count - gtc.LeftOut}/{ids.Count} catalogue components. "
-                   + $"Missing or custom part entries: {unavailable}. " + BuildTools.GtcHint;
+            var shelf = await BuildShelfGtc(api, lid, token);
+            return $"{_files.Deliver(shelf.Package.File, folder)}. {shelf.Summary} " + BuildTools.GtcHint;
         });
+
+    internal static async Task<(GtcPackage Package, string Summary)> BuildShelfGtc(IToolsApi api, string id, string token)
+    {
+        var library = await api.GetLibrary(id, token) ?? throw new ArgumentException($"No library {id}.");
+        var parts = library.Items.Where(i => i.Assembly != null).SelectMany(i => i.Assembly!.Parts).ToList();
+        var ids = parts.Where(p => p.Present && p.Component != null).Select(p => p.Component!)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (ids.Count == 0) throw new ArgumentException("The saved assemblies have no available catalogue components.");
+        if (ids.Count > 500) throw new ArgumentException("A GTC package holds at most 500 distinct components.");
+        var gtc = await api.BuildGtcPackage(library.Name, ids, token);
+        var unavailable = parts.Count(p => !p.Present || p.Component == null);
+        return (gtc, $"Packaged {ids.Count - gtc.LeftOut}/{ids.Count} catalogue components. Missing or custom part entries: {unavailable}.");
+    }
 
     [McpServerTool(Name = "export_library"), Description(
         "Saves a library as one .mKit on the person's disk - for when they want a file rather than opening the " +

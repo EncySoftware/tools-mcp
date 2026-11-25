@@ -8,7 +8,7 @@ person's account, checks what fits what, and puts the tools into a library in th
 that library through the Tools catalogue extension. It is the tools.encycam.com counterpart of
 [dmc-mcp](https://github.com/EncySoftware/dmc-mcp).
 
-Version 0.7.0 adds shelf GTC export and direct magazine access in local Windows sessions. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
+Version 0.7.2 reads article-specific cutting conditions with original ranges and units. Version 0.7.1 adds one-call shelf installation, operation lookup by tool position and the actual adapter chain. The hosted server for Hermes (`tools-mcp serve`) came with 0.2.0, the machine's spindle for `assemble_to_spindle` with 0.3.0.
 
 | Tool | What it does |
 |---|---|
@@ -36,6 +36,8 @@ Version 0.7.0 adds shelf GTC export and direct magazine access in local Windows 
 | `delete_library` | Deletes a library for good. Only on the person's explicit request. |
 | `export_shelf_gtc` | Exports the available catalogue parts of saved assemblies to a GTC zip. |
 | `list_project_tools` | Local Windows stdio: read a running ENCY project's actual magazines, positions and tool captions. With multiple instances specify the process ID. |
+| `install_shelf_in_project` | Local Windows: install a saved shelf directly, returning magazine positions and the actual adapters from cutter to machine. |
+| `list_tool_operations` | Local Windows: find operation names and IDs by magazine and tool position. |
 | `import_project_gtc` | Local Windows stdio: import a GTC zip (absolute path) into the indicated open project. Pass the PID and project path from `list_project_tools`. Reports the created library, actual slots and skipped tools. Save in ENCY to keep the changes. |
 | `export_library` | Saves a library as one `.mKit`. |
 | `export_tool_list` | Saves the library's ENCY tool list as a `.tom` file and reports how many assemblies were exported or omitted. |

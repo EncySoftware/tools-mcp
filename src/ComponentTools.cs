@@ -89,10 +89,36 @@ public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? file
         "Reads the maker's cutting data for a component. Includes material groups, cutting speed, spindle speed, " +
         "feeds by operation, engagement conditions and the table source when available.")]
     public Task<string> GetCuttingData(string id,
-        [Description("Optional part of a material group name in the manufacturer's language, or a material number")] string? material = null) =>
+        [Description("Optional part of a material group name in the manufacturer's language, or a material number")] string? material = null,
+        [Description("Page of article-specific condition sets (1-based, 10 per page)")] int page = 1) =>
         Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
+            if (page < 1) return "ERROR: page must be at least 1.";
+            var compat = await api.GetCompat(cid, token);
+            if (compat?.ArticleCutting is { Count: > 0 } article)
+            {
+                var query = material?.Trim() ?? "";
+                var matches = article.Where(r => r.Material.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || r.Fields.Any(f => f.Length == 2 && f[0].Contains("material", StringComparison.OrdinalIgnoreCase)
+                        && f[1].Contains(query, StringComparison.OrdinalIgnoreCase))).ToArray();
+                if (matches.Length == 0)
+                    return "No matching material. Available: " + string.Join(", ", article.Select(r => r.Material).Distinct());
+                const int size = 10;
+                int pages = (matches.Length - 1) / size + 1;
+                if (page > pages) return $"ERROR: select an article table page from 1 to {pages}.";
+                var answer = new StringBuilder($"Supplier cutting conditions: {matches.Length}; page {page}/{pages}.");
+                foreach (var row in matches.Skip((page - 1) * size).Take(size))
+                {
+                    answer.AppendLine().AppendLine().Append(row.Material);
+                    if (!string.IsNullOrWhiteSpace(row.Operation)) answer.Append(" · " + row.Operation);
+                    if (!string.IsNullOrWhiteSpace(row.Label)) answer.Append(" · " + row.Label);
+                    foreach (var field in row.Fields.Where(f => f.Length == 2))
+                        answer.AppendLine().Append(field[0]).Append(": ").Append(field[1]);
+                }
+                return answer.ToString();
+            }
+            if (page > 1) return "ERROR: series tables are returned on page 1.";
             var data = await api.GetCuttingData(cid, token);
             if (data == null) return "No manufacturer's cutting table is available for this component in your catalogue.";
             string filter = material?.Trim() ?? "";

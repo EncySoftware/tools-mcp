@@ -8,7 +8,7 @@ namespace ToolsMcp;
 
 [McpServerToolType]
 [SupportedOSPlatform("windows")]
-public sealed class LocalEncyTools
+public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
 {
     [McpServerTool(Name = "list_project_tools", ReadOnly = true), Description(
         "Reads installed tools from the current ENCY machine magazines. Returns the ENCY process id, project path, magazine, actual T position and component caption. If several ENCY processes are open, choose a processId.")]
@@ -18,6 +18,23 @@ public sealed class LocalEncyTools
         "Installs a local GTC zip into the specified open ENCY project in advanced tools mode. Creates a component library, modifies the open project and reports installed tools and skipped reasons. Use list_project_tools to identify the target; never assume a shelf T number is its magazine position. Does not save the project.")]
     public Task<string> ImportProjectGtc(int processId, string projectPath, string packagePath, string? magazine = null)
         => Run("import", processId, [projectPath, packagePath, magazine ?? ""]);
+
+    [McpServerTool(Name = "list_tool_operations", ReadOnly = true), Description(
+        "Shows the names and ids of operations that use a tool position in a specific magazine of the open ENCY project. Use the magazine name or caption and T number from list_project_tools.")]
+    public Task<string> ListToolOperations(int processId, string magazine, int position) =>
+        Run("operations", processId, [magazine, position.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+
+    [McpServerTool(Name = "install_shelf_in_project"), Description(
+        "Imports a saved catalogue shelf into an open ENCY project in one call. Use a libraryId from list_libraries and the PID and exact project path from list_project_tools. Creates a component library, installs compatible tools, reports actual holders and positions. Does not save the project.")]
+    public Task<string> InstallShelfInProject(string libraryId, int processId, string projectPath, string? magazine = null) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            if (Ids.Of(libraryId) is not { } id) return Ids.NotALibrary(libraryId);
+            var shelf = await LibraryTools.BuildShelfGtc(api, id, token);
+            var file = SavedFiles.Save(shelf.Package.File, null);
+            var result = await ImportProjectGtc(processId, projectPath, file, magazine);
+            return $"{result}\n{shelf.Summary} GTC: {file}";
+        });
 
     private static async Task<string> Run(string operation, int? pid, string[] arguments)
     {
