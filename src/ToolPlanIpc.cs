@@ -50,6 +50,8 @@ internal static partial class EncyIpc
     private static int ToolPlanCommand(Handle app,Handle project,AssemblyLoadContext runtime,int pid,string path,string command)
     {
         if (command is not ("preview" or "apply")) throw new ArgumentException("Unknown plan action.");
+        if (command == "apply" && !LiveProjectChangeTools.Enabled)
+            throw new InvalidOperationException("Live batch tool changes are disabled.");
         var request=JsonSerializer.Deserialize<ToolPlanRequest>(Console.In.ReadToEnd(),AuditOutput.Json)
             ?? throw new ArgumentException("Missing plan.");
         var report=RunToolPlan(app,project,runtime,pid,path,command,request);
@@ -109,7 +111,8 @@ internal static partial class EncyIpc
                         var after=row.After!;
                         var op=Operation(row.Change.OperationId);
                         SetInstalled(project,runtime,op,row.Change.OperationId,after.Id,after.Source=="machineMagazine");
-                    }, isolatedCopy?null:o=>Console.Error.WriteLine(ProjectToolChangePlan.CheckpointPrefix+JsonSerializer.Serialize(o,AuditOutput.Json)));
+                    }, isolatedCopy?null:o=>Console.Error.WriteLine(ProjectToolChangePlan.CheckpointPrefix+JsonSerializer.Serialize(o,AuditOutput.Json)),
+                    approve: isolatedCopy ? null : () => LiveProjectChangeTools.Enabled && LiveProjectChangeTools.ConfirmOnDesktop(pid, path, rows));
                 return new(result.Status,pid,path,request.PreviewId,rows,result.Outcomes);
             }
         } finally { if (acquired) guard.ReleaseMutex(); }

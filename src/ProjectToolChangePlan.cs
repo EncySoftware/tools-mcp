@@ -67,10 +67,12 @@ internal static class ProjectToolChangePlan
         a.Id == b.Id && a.Identity == b.Identity && a.Source == b.Source;
 
     internal static (string Status, List<ChangeOutcome> Outcomes) Apply(ToolPlanRequest request, int pid,
-        IReadOnlyList<ToolChangeRow> rows, Func<ProjectToolChange,ToolChangeRow> reread, Action<ToolChangeRow> assign, Action<ChangeOutcome>? checkpoint=null)
+        IReadOnlyList<ToolChangeRow> rows, Func<ProjectToolChange,ToolChangeRow> reread, Action<ToolChangeRow> assign, Action<ChangeOutcome>? checkpoint=null, Func<bool>? approve=null)
     {
         if (!request.Confirmed || string.IsNullOrWhiteSpace(request.PreviewId)) return ("confirmationRequired", []);
         if (rows.Any(r=>r.Problem!=null) || Fingerprint(pid,request,rows) != request.PreviewId) return ("stalePreview", []);
+        if (approve != null && !approve())
+            return ("notApproved", rows.Select(row => new ChangeOutcome(row.Change.OperationId, "skipped")).ToList());
         var results = new List<ChangeOutcome>();
         void Record(ChangeOutcome outcome) { results.Add(outcome); checkpoint?.Invoke(outcome); }
         bool stop = false, changed = false;

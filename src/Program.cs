@@ -60,7 +60,12 @@ var mcp = builder.Services
     .WithTools<BuildTools>()
     .WithTools<LibraryTools>();
 
-if (OperatingSystem.IsWindows()) mcp.WithTools<LocalEncyTools>();
+if (OperatingSystem.IsWindows())
+{
+    mcp.WithTools<LocalEncyTools>();
+    if (LiveProjectChangeTools.Enabled)
+        mcp.WithTools<LiveProjectChangeTools>();
+}
 
 await builder.Build().RunAsync();
 return 0;

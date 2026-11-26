@@ -30,6 +30,16 @@ public class ProjectToolChangePlanTests
         Assert.Equal(0,calls);
     }
 
+    [Fact] public void AgentConfirmationCannotOverrideOperatorRefusal()
+    {
+        var a=Row(Change()); var b=Row(Change());
+        var result=ProjectToolChangePlan.Apply(Confirm(Request(a,b),a,b),1,[a,b],
+            _=>throw new Exception("unexpected reread"),_=>throw new Exception("unexpected setter"),approve:()=>false);
+        Assert.Equal("notApproved",result.Status);
+        Assert.Equal(2,result.Outcomes.Count);
+        Assert.All(result.Outcomes,o=>Assert.Equal("skipped",o.Status));
+    }
+
     [Fact] public void ReportsPartialApplicationAndSkipsRemainingOnError() {
         var a=Row(Change());var b=Row(Change());var c=Row(Change());
         var rows=new[]{a,b,c};var current=rows.ToDictionary(r=>r.Change.OperationId);
