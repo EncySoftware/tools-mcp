@@ -47,12 +47,15 @@ public record CustomTool(string Family, double DiameterMm, double LengthMm, doub
 /// stands, the spindle it works on (MAIN or SUB) and its measured gauge length. Taken out by its id alone.
 /// </summary>
 public record AssemblyEntry(IReadOnlyList<LibraryEntry> Parts, string? Name = null, string? Number = null,
-    string? Place = null, string? Spindle = null, double? GaugeLengthMm = null, string? Id = null);
+    string? Place = null, string? Spindle = null, double? GaugeLengthMm = null, string? Id = null, ShelfSetup? Setup = null);
 /// <summary>An item to put in or take out of a library: a catalogue component, a custom tool or an assembly of them.</summary>
 public record LibraryEntry(string? Component = null, CustomTool? Custom = null, AssemblyEntry? Assembly = null);
 /// <summary>An assembly on a shelf: its parts as rows, the machine end first.</summary>
+public record ShelfMeasurement(double Mm, string Source);
+public record AssemblyUse(string Operation, string? Material = null);
+public record ShelfSetup(string? Machine = null, ShelfMeasurement? Stickout = null, ShelfMeasurement? ClampingDepth = null, IReadOnlyList<AssemblyUse>? Applications = null);
 public record LibraryAssembly(string Id, string? Number, string? Place, IReadOnlyList<LibraryItem> Parts,
-    string? Spindle = null, double? GaugeLengthMm = null);
+    string? Spindle = null, double? GaugeLengthMm = null, ShelfSetup? Setup = null);
 public record LibraryItem(string? Component, string? Name, string? Kit, bool Present, string? Kind, string? KitName,
     double? DiameterMm, double? LengthMm, CustomTool? Custom, LibraryAssembly? Assembly = null, CatalogueReference? Reference = null);
 public record CatalogueReference(string Article, double? OverallMm, double? UsableMm, double? OutsideShankMm, double? CornerRadiusMm);
@@ -60,7 +63,7 @@ public record Library(string Id, string Name, DateTimeOffset CreatedAt, DateTime
 public record LibrarySummary(string Id, string Name, int ItemCount, int MissingCount, DateTimeOffset UpdatedAt);
 public record DownloadedFile(string FileName, byte[] Bytes);
 public record ToolListExport(DownloadedFile File, int? Exported, int? LeftOut);
-public record AssemblyPatch(string? Name, string? Number, string? Place, string? Spindle, double? GaugeLengthMm);
+public record AssemblyPatch(string? Name, string? Number, string? Place, string? Spindle, double? GaugeLengthMm, ShelfSetup? Setup = null);
 public record CuttingRow(string Group, string? Hardness, IReadOnlyList<string> Numbers, double Vc, long Rpm,
     IReadOnlyDictionary<string,double> Fz, IReadOnlyDictionary<string,long> Vf);
 public record CuttingData(string Series, string? Source, double TableDiameterMm, double ToolDiameterMm, int? Flutes,
@@ -105,6 +108,8 @@ public interface IToolsApi
     Task<GtcPackage> BuildGtcPackage(string name, IReadOnlyList<string> ids, string token);
     Task<DownloadedFile> BuildCustomTool(CustomTool spec, string token);
     Task<IReadOnlyList<LibrarySummary>> ListLibraries(string token);
+    Task<JsonObject> ShelfReplacements(string library, string component, double tolerance, int page, string token);
+    Task<JsonObject> AssemblyGap(string library, string assembly, int after, string token);
     Task<Library?> GetLibrary(string id, string token);
     Task<Library> CreateLibrary(string name, IReadOnlyList<LibraryEntry> items, string token);
     Task<Library> AddToLibrary(string id, IReadOnlyList<LibraryEntry> items, string token);
@@ -247,6 +252,10 @@ public class ToolsApi : IToolsApi
     public Task<IReadOnlyList<LibrarySummary>> ListLibraries(string token) =>
         Get<IReadOnlyList<LibrarySummary>>("/me/libraries", token);
 
+    public Task<JsonObject> ShelfReplacements(string library, string component, double tolerance, int page, string token) =>
+        Get<JsonObject>($"/me/libraries/{Esc(library)}/items/{Esc(component)}/replacements" + Params(("diameterToleranceMm",tolerance),("page",page)),token);
+    public Task<JsonObject> AssemblyGap(string library,string assembly,int after,string token) =>
+        Get<JsonObject>($"/me/libraries/{Esc(library)}/assemblies/{Esc(assembly)}/gap" + Params(("after",after)),token);
     public Task<Library?> GetLibrary(string id, string token) => GetOrNull<Library>("/me/libraries/" + Esc(id), token);
 
     public Task<Library> CreateLibrary(string name, IReadOnlyList<LibraryEntry> items, string token) =>

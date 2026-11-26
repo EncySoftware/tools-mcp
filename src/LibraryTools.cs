@@ -15,7 +15,8 @@ public record AssemblyInput(
     [property: Description("MAIN or SUB, the spindle it works on")] string? Spindle = null,
     [property: Description("Measured gauge length, mm: from where the holder mounts in the spindle to the tip")]
     double? GaugeLengthMm = null,
-    [property: Description("A name; the cutter's when left out")] string? Name = null);
+    [property: Description("A name; the cutter's when left out")] string? Name = null,
+    [property: Description("Measured setup and intended uses, with measurement sources")] ShelfSetup? Setup = null);
 
 /// <summary>
 /// The person's libraries on tools.encycam.com: shelves of tools in their account, which ENCY opens through the
@@ -114,8 +115,9 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         [Description("Where it stands: machine, magazine pocket, turret station")] string? place = null,
         [Description("MAIN or SUB, the spindle it works on")] string? spindle = null,
         [Description("Measured gauge length, mm: from where the holder mounts in the spindle to the tip")] double? gaugeLengthMm = null,
-        [Description("A name; the cutter's when left out")] string? name = null) =>
-        AddToLibrary(id, assemblies: [new AssemblyInput(componentIds, customTool, number, place, spindle, gaugeLengthMm, name)]);
+        [Description("A name; the cutter's when left out")] string? name = null,
+        [Description("Measured setup and intended uses, including sources")] ShelfSetup? setup = null) =>
+        AddToLibrary(id, assemblies: [new AssemblyInput(componentIds, customTool, number, place, spindle, gaugeLengthMm, name, setup)]);
 
     [McpServerTool(Name = "export_tool_list"), Description(
         "Saves a library's assemblies as ENCY's tool list (.tom): each assembly one tool, built and numbered, reaching as " +
@@ -141,16 +143,28 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         "Edits a saved assembly in place. Give only the fields to change. The assembly id is in show_library.")]
     public Task<string> UpdateAssembly(string libraryId, string assemblyId, string? number = null,
         string? name = null, string? place = null, [Description("MAIN or SUB; empty to clear")] string? spindle = null,
-        [Description("Measured gauge length in mm; zero to clear")] double? gaugeLengthMm = null) =>
+        [Description("Measured gauge length in mm; zero to clear")] double? gaugeLengthMm = null,
+        [Description("Replace the entire measured setup and intended uses. Omit to preserve it. Measurements require a value in mm and a source.")] ShelfSetup? setup = null) =>
         Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(libraryId) is not { } lib) return Ids.NotALibrary(libraryId);
             if (Ids.Of(assemblyId) is not { } aid) return $"ERROR: '{assemblyId}' is not an assembly id - see show_library";
-            if (number == null && name == null && place == null && spindle == null && gaugeLengthMm == null)
+            if (number == null && name == null && place == null && spindle == null && gaugeLengthMm == null && setup == null)
                 return "ERROR: specify at least one assembly field to change";
-            var updated = await api.UpdateAssembly(lib, aid, new AssemblyPatch(name, number, place, spindle, gaugeLengthMm), token);
+            var updated = await api.UpdateAssembly(lib, aid, new AssemblyPatch(name, number, place, spindle, gaugeLengthMm, setup), token);
             return "Updated " + Assembly(updated.Items.Single(item => item.Assembly?.Id == aid));
         });
+
+    [McpServerTool(Name="find_shelf_replacements", ReadOnly=true),Description("Find alternatives for a saved component, including withdrawn articles with dimensional snapshots. Results report differences, unverified fields and catalogue pagination. The default diameter tolerance is zero mm.")]
+    public Task<string> FindShelfReplacements(string libraryId,string componentId,double diameterToleranceMm=0,int page=0) =>
+        Replies.WithToken(tokens,async token => Ids.Of(libraryId) is not {} shelf ? Ids.NotALibrary(libraryId) :
+            Ids.Of(componentId) is not {} id ? Ids.NotAComponent(componentId) :
+            (await api.ShelfReplacements(shelf,id,diameterToleranceMm,page,token)).ToJsonString());
+
+    [McpServerTool(Name="check_shelf_assembly_gap", ReadOnly=true),Description("Check the joint after a zero-based part index in a saved assembly, from machine to cutter. Returns recorded connection codes, suggested adapters and where they are on the named shelf.")]
+    public Task<string> CheckShelfAssemblyGap(string libraryId,string assemblyId,int after) =>
+        Replies.WithToken(tokens,async token=> Ids.Of(libraryId) is not {} shelf ? Ids.NotALibrary(libraryId) :
+            Ids.Of(assemblyId) is not {} id ? "ERROR: unknown assembly id." : (await api.AssemblyGap(shelf,id,after,token)).ToJsonString());
 
     [McpServerTool(Name = "export_assembly"), Description(
         "Saves one assembly as an ENCY .sc12tool file. Get the library id and assembly id from list_libraries and show_library.")]
@@ -301,7 +315,7 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
                               "other - something is missing between them (what_fits shows what goes there)");
             var parts = ordered.Select(c => new LibraryEntry(Component: c)).ToList();
             if (a.CustomTool != null) parts.Add(new LibraryEntry(Custom: a.CustomTool.ToCustomTool()));
-            entries.Add(new LibraryEntry(Assembly: new AssemblyEntry(parts, a.Name, a.Number, a.Place, spindle, a.GaugeLengthMm)));
+            entries.Add(new LibraryEntry(Assembly: new AssemblyEntry(parts, a.Name, a.Number, a.Place, spindle, a.GaugeLengthMm, Setup:a.Setup)));
         }
         return (entries, notes, null);
     }
@@ -394,6 +408,12 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         if (a.Place != null) text.Append(" · " + a.Place);
         if (a.Spindle != null) text.Append($" · {a.Spindle} spindle");
         if (a.GaugeLengthMm is { } g) text.Append($" · gauge {Replies.Mm(g)} mm");
+        if (a.Setup is { } setup) {
+            if (setup.Machine != null) text.Append($" · machine {setup.Machine}");
+            if (setup.Stickout is { } s) text.Append($" · stickout {Replies.Mm(s.Mm)} mm ({s.Source})");
+            if (setup.ClampingDepth is { } d) text.Append($" · clamping depth {Replies.Mm(d.Mm)} mm ({d.Source})");
+            foreach(var use in setup.Applications ?? []) text.Append($" · {use.Operation} {use.Material}");
+        }
         text.Append($" [assembly id {a.Id}]");
         if (!item.Present) text.Append(" - a part is GONE from the catalogue");
         return text.ToString();

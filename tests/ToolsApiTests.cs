@@ -12,6 +12,20 @@ public class ToolsApiTests
         """;
 
     [Fact]
+    public async Task WarehouseSuggestionsUseTheShelfAndItsCaller()
+    {
+        var stub = new StubHandler().OnJson("GET","/api/me/libraries/L1/items/C1/replacements","{}")
+            .OnJson("GET","/api/me/libraries/L1/assemblies/A1/gap","{}");
+        var api=StubHandler.Api(stub);
+        await api.ShelfReplacements("L1","C1",0.2,1,"user");
+        await api.AssemblyGap("L1","A1",0,"user");
+        Assert.All(stub.Requests,r=>Assert.Equal("Bearer user",r.Authorization));
+        Assert.Contains("diameterToleranceMm=0.2",stub.Requests[0].Uri.Query);
+        Assert.Contains("page=1",stub.Requests[0].Uri.Query);
+        Assert.Contains("after=0",stub.Requests[1].Uri.Query);
+    }
+
+    [Fact]
     public async Task EveryCallCarriesThePersonsToken()
     {
         var stub = new StubHandler().OnJson("GET", "/api/me", """{"sub":"s1","username":"alice","email":"alice@example.com"}""");
