@@ -119,6 +119,9 @@ internal static class ProjectToolPlan
             audit.OperationUnits,
             includeCatalogue,
             plan,
+            installationRequired = rows.Where(r => r.Selected?.Key.Source is "catalogue" or "warehouseAssembly")
+                .Select(r => new { r.Step.OperationId, componentId = r.Selected!.Key.ToolId, r.Selected.Key.AssemblyId,
+                    r.Selected.Key.LibraryId, r.Selected.Key.InsertId, next = "Install the chosen tool or assembly and replan using its actual project identity." }),
             previewInput = new { audit.ProjectPath, audit.ProcessId, audit.OperationUnits, changes }
         }, AuditOutput.Json);
     }
