@@ -11,6 +11,16 @@ internal sealed record HoleStage(string FeatureId,double DiameterMm,double Depth
     bool IsBlind,bool? IsCrossHole,double? TipAngleDegrees,HoleChamfer? EntranceChamfer,HoleThread? Thread,HoleFrame? FeatureLcs);
 internal sealed record RecognizedHole(string AssignedNode,string FeatureId,string Kind,List<HoleStage> Steps,bool AllChildStepsRead);
 
+internal static class HoleSelections
+{
+    internal static List<RecognizedHole> Combine(IEnumerable<RecognizedHole> reads){
+        var holes=reads.DistinctBy(h=>h.FeatureId).ToList();
+        var inCompound=holes.Where(h=>h.Kind=="compoundHole").SelectMany(h=>h.Steps)
+            .Select(s=>s.FeatureId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return holes.Where(h=>h.Kind!="hole" || !inCompound.Contains(h.FeatureId)).ToList();
+    }
+}
+
 internal static partial class EncyIpc
 {
     private static int SelectedHoleFeatures(Handle project,AssemblyLoadContext runtime,int pid,string path,string requested) {
@@ -29,11 +39,10 @@ internal static partial class EncyIpc
         double scale=units=="imperial"?25.4:1;
         var selected=finder.Object("GetSelectedFeatures");
         var geometry=finder.Object("GetFeaturesForSelected");
-        var features=RecognizedHoles(selected,runtime,"selected feature",double.NaN,scale)
-            .Concat(RecognizedHoles(geometry,runtime,"selected model geometry",double.NaN,scale))
-            .DistinctBy(h=>h.FeatureId).ToList();
+        var features=HoleSelections.Combine(RecognizedHoles(selected,runtime,"selected feature",double.NaN,scale)
+            .Concat(RecognizedHoles(geometry,runtime,"selected model geometry",double.NaN,scale)));
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { processId=pid,projectPath=path,operationUnits=units,
-            unitsSource=requested=="auto"?"operationExport":"caller",features },
+            unitsSource=requested=="auto"?"operationExport":"caller",status=features.Count>0?"recognized":"noRecognizedHole",features },
             new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
         return 0;
     }

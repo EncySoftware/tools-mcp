@@ -78,7 +78,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             return $"{result}\n{shelf.Summary} GTC: {file}";
         });
 
-    [McpServerTool(Name="get_selected_hole_features",ReadOnly=true),Description("Read ENCY-recognized holes and compound hole stages for selected model geometry before planning operations. Returns reported entrances, thread dimensions and feature-local axial levels in mm. Does not run recognition or modify the model. For a project without a current operation, specify the displayed metric or imperial system.")]
+    [McpServerTool(Name="get_selected_hole_features",ReadOnly=true),Description("Read ENCY-recognized holes and compound hole stages for selected model geometry before planning operations. Returns reported entrances, thread dimensions and feature-local axial levels in mm. Reads selected faces and recognized features without starting full-project recognition or modifying the model. For a project without a current operation, specify the displayed metric or imperial system.")]
     public Task<string> GetSelectedHoleFeatures(string operationUnits="auto",int? processId=null) =>
         Run("selected-hole-features",processId,[operationUnits]);
 

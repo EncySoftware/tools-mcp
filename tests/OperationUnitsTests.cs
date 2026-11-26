@@ -26,4 +26,15 @@ public class OperationUnitsTests
         var g=Assert.Single(ProjectToolAudit.Drill([a,b],null).HoleGroups!);
         Assert.Equal(2,g.Count);
     }
+
+    [Fact] public void DoesNotPlanAnIndividualSelectedStageTwice()
+    {
+        var stage=new HoleStage("step",10,20,0,20,false,false,null,new(1,45),new(12,16,-16,0),null);
+        var parent=new RecognizedHole("CAD face","parent","compoundHole",[stage],true);
+        var standalone=new RecognizedHole("feature tree","step","hole",[stage],true);
+        var actual=Assert.Single(HoleSelections.Combine([standalone,parent,parent]));
+        Assert.Equal("parent",actual.FeatureId);
+        Assert.Equal(12,actual.Steps[0].Thread!.OuterDiameterMm);
+        Assert.Equal(45,actual.Steps[0].EntranceChamfer!.AngleDegrees);
+    }
 }
