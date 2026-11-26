@@ -79,6 +79,7 @@ public record ComponentQuery(string? Query = null, string? Kit = null, string? C
 /// <summary>Every route of tools.encycam.com, called as the person signed in.</summary>
 public interface IToolsApi
 {
+    Task<JsonObject> FindOperationTools(OperationBrief brief, string token);
     Task<JsonObject> FindMills(string operation, double widthMm, double depthMm, double? innerRadiusMm, string material, string? spindle, int page, int size, string token);
     Task<DownloadedFile> ExportMill(string componentId, string? libraryId, string? assemblyId, string token);
     Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm, string material, int page, int size, string token, string? spindle = null);
@@ -277,6 +278,11 @@ public class ToolsApi : IToolsApi
 
     public Task<Library> UpdateAssembly(string library, string assembly, AssemblyPatch patch, string token) =>
         Send<Library>(HttpMethod.Put, $"/me/libraries/{Esc(library)}/assemblies/{Esc(assembly)}", token, patch);
+
+    public Task<JsonObject> FindOperationTools(OperationBrief b, string token) => Get<JsonObject>("/operation-tools" + Params(
+        ("operation", b.Operation), ("diameter", b.Diameter), ("width", b.Width), ("depth", b.Depth), ("bottom", b.Bottom),
+        ("breakthrough", b.Breakthrough), ("innerRadius", b.InnerRadius), ("noInsideCorner", b.NoInsideCorner),
+        ("material", b.Material), ("spindle", b.Spindle), ("page", b.Offset), ("cursor", b.Offset), ("size", b.Size)), token);
 
     public Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm,
         string material, int page, int size, string token, string? spindle = null) => Get<JsonObject>("/drills" + Params(

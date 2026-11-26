@@ -4,6 +4,8 @@ using ToolsMcp;
 /** tools.encycam.com in memory: results set per method, a failure per method, and every call with the token it carried. */
 internal sealed class FakeToolsApi : IToolsApi
 {
+    public Task<System.Text.Json.Nodes.JsonObject> FindOperationTools(OperationBrief brief, string token)
+    { Saw(nameof(FindOperationTools), token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
     public Task<System.Text.Json.Nodes.JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm, string material, int page, int size, string token, string? spindle = null)
     { Saw(nameof(FindDrills), token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
     public Task<System.Text.Json.Nodes.JsonObject> FindMills(string operation,double widthMm,double depthMm,double? innerRadiusMm,string material,string? spindle,int page,int size,string token)

@@ -88,7 +88,7 @@ internal static partial class EncyIpc
             var job=op.Object("get_ModelFormerJobAssignment");var features=new List<Shape?>();
             for(int i=0;i<job.Count("get_Count");i++)features.Add(FeatureGeometry(project,runtime,job.Object("get_Item",i).Text("get_Caption"),0,scale,true));
             const string key="ConditionsSection.Workpiece.Material";
-            Console.WriteLine(JsonSerializer.Serialize(new{projectPath=path,operationId=id,operationName=op.Text("GetName"),
+            Console.WriteLine(JsonSerializer.Serialize(new{processId=int.Parse(args[1],CultureInfo.InvariantCulture),projectPath=path,operationId=id,operationName=op.Text("GetName"),
                 material=xml.Count("get_PropExists",key)==0?null:xml.Text("GetString",key),features,availableWidthMm=(double?)null}));
             return 0;
         }
@@ -100,15 +100,31 @@ internal static partial class EncyIpc
         if(mode is not ("slot" or "shoulder" or "tip" or "cylinder" or "through") || !double.IsFinite(width)||width<=0
             || !double.IsFinite(depth)||depth<=0||!double.IsFinite(extra)||extra<0||(mode!="through"&&extra!=0)
             ||(radius is double r && (!double.IsFinite(r)||r<0)))throw new ArgumentException("Invalid search dimensions.");
-        var results=Inventory(project,scale).Where(t=>{
+        double Required(Installed t) => mill || mode=="tip" ? depth : t.Angle is >0 and <=180
+            ? depth+extra+(t.Angle==180?0:t.DiameterMm/(2*Math.Tan(Math.PI*t.Angle.Value/360))) : double.PositiveInfinity;
+        var inventory = Inventory(project,scale);
+        var results=inventory.Where(t=>{
             var shape=t.Type.Split('.').Last();
             if(!(t.DiameterMm>0 && t.ReachMm>0))return false;
             if(mill)return shape.Equals("EndMill",StringComparison.OrdinalIgnoreCase) && t.DiameterMm<=width && (radius==null||t.DiameterMm<=2*radius)&&t.ReachMm>=depth;
             if(!shape.Equals("Drill",StringComparison.OrdinalIgnoreCase)||Math.Abs(t.DiameterMm-width)>1e-7)return false;
-            return mode=="tip"?t.ReachMm>=depth:t.Angle is >0 and <=180 && t.ReachMm>=depth+extra+(t.Angle==180?0:t.DiameterMm/(2*Math.Tan(Math.PI*t.Angle.Value/360)));
+            return t.ReachMm >= Required(t);
         }).ToList();
         if(args[0]=="machine-fit"){
-            Console.WriteLine(JsonSerializer.Serialize(new{projectPath=path,operationId=id,installed=results}));
+            var installed = results.Select(t => new {
+                t.ID, t.Identity, t.Caption, t.Type, t.DiameterMm, t.ReachMm, t.Angle, t.Magazine, t.Position, t.Node,
+                requiredMm = Required(t), source = t.Node ? "machineMagazine" : "projectToolList"
+            });
+            // In a legacy project the assigned tool ID belongs to the project list, not to the magazine-node namespace.
+            var active = xml.Object("GetArray", "ToolSection.Tools");
+            var assignedId = active.Count("get_TopItem") < 0 ? null :
+                active.Object("get_Itm", 0).Text("GetCalculatedString", "ToolID");
+            var current = inventory.FirstOrDefault(t => !t.Node && t.ID == assignedId);
+            var assignedTool = current == null ? null : new {
+                current.ID, current.Caption, current.Position, current.DiameterMm, current.ReachMm,
+                matchesGeometry = results.Contains(current)
+            };
+            Console.WriteLine(JsonSerializer.Serialize(new{projectPath=path,operationId=id,installed,assignedTool}));
             return 0;
         }
         if(string.IsNullOrWhiteSpace(path)||!string.Equals(path,args[8],StringComparison.OrdinalIgnoreCase)||!string.Equals(id,args[9],StringComparison.OrdinalIgnoreCase))

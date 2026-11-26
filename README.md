@@ -45,9 +45,10 @@ Version 0.7.3 applies an article cutting condition to an operation in the open E
 | `export_assembly` | Downloads one saved assembly as an ENCY `.sc12tool` file. |
 | `update_assembly` | Changes the name, T number, place, spindle or measured gauge length of a saved assembly. |
 | `find_adapter_chain` | Finds a direct fit or a shortest chain of catalogued adapters between two component IDs, in either order. Resolve part numbers with `find_components` first. |
+| `find_tools_for_operation` | Plan a drilling, slot or shoulder operation before opening ENCY. Pass known dimensions in mm. The response lists the missing fields or returns matching tools with available and required reach. |
 | `find_operation_mills` | Slot and shoulder milling. Enter available cutter width, depth and optionally the smallest inside corner radius and spindle interface. Larger fitting square end mills are shown first within each source. Follow `nextCursor` while `hasMore` is true. |
 | `get_milling_operation` (local Windows) | Read the selected operation and recognized feature height and inside radius; unknown dimensions require input. |
-| `find_tools_for_selected_operation` (local Windows) | Search installed tools, then matching personal assemblies and catalogue tools. Specify ENCY units and the same dimensions as the catalogue search. |
+| `find_tools_for_selected_operation` (local Windows) | Search installed tools, then matching personal assemblies and catalogue tools. Specify ENCY units. Recognized geometry comes from the selected project. Supply missing dimensions or confirm there is no inside corner. Each match reports required and available reach. |
 | `assign_installed_operation_tool` (local Windows) | Assign an existing project tool or magazine node, without importing it again. Rechecks the project, operation, geometry and tool identity. |
 | `assign_operation_mill` (local Windows) | Import the selected end mill or warehouse assembly into the selected milling operation after confirmation. |
 | `find_operation_drills` | Search by hole diameter and depth in mm. Returns compatible working lengths, matching personal assemblies first, and permitted supplier data for the requested material. Choose tip, full-diameter blind, or through depth with breakout. |

@@ -8,6 +8,17 @@ namespace ToolsMcp;
 [McpServerToolType]
 public class SearchTools(IToolsApi api, TokenProvider tokens)
 {
+    [McpServerTool(Name = "find_tools_for_operation", ReadOnly = true), Description(
+        "Plan tool selection before creating an ENCY operation. Send known geometry in mm and ask only the questions in missing. " +
+        "operation is drilling, milling (strategy unknown), slot or shoulder. For drilling use diameter and bottom tip/cylinder/through; " +
+        "for milling use width and the smallest innerRadius or confirm noInsideCorner. Matches include actual and required reach and warehouse assemblies. " +
+        "offset is the zero-based drill page or returned milling nextCursor.")]
+    public Task<string> FindToolsForOperation(string? operation = null, double? diameter = null, double? width = null,
+        double? depth = null, string? bottom = null, double? breakthrough = null, double? innerRadius = null,
+        bool? noInsideCorner = null, string? material = null, string? spindle = null, int offset = 0, int size = 20) =>
+        Replies.WithToken(tokens, async token => (await api.FindOperationTools(new(operation, diameter, width, depth,
+            bottom, breakthrough, innerRadius, noInsideCorner, material, spindle, offset, size), token)).ToJsonString());
+
     [McpServerTool(Name = "find_operation_mills", ReadOnly = true), Description(
         "Find square end mills for slot or shoulder milling by available cutter width, axial depth and optional inside corner radius (mm). " +
         "Matched saved assemblies come first; specify the spindle interface to reject known incompatible mounts. Unknown mounts require checking. " +

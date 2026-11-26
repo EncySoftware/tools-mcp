@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json.Nodes;
 using System.Runtime.Versioning;
 using ModelContextProtocol.Server;
 
@@ -77,17 +78,33 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     [McpServerTool(Name="find_tools_for_selected_operation", ReadOnly=true), Description(
         "Search the selected project's installed magazine/tools first, then matching warehouse assemblies and catalogue cutters. " +
         "mode: tip/cylinder/through for drilling, slot/shoulder for milling. widthMm is the exact hole diameter or available milling width. " +
-        "All dimensions in mm. operationUnits is metric or imperial as displayed by ENCY. Use the returned installed ID and Identity for assignment.")]
-    public async Task<string> FindToolsForSelectedOperation(string operationUnits,string mode,double widthMm,double depthMm,int processId,
-        double breakthroughMm=0,double? innerRadiusMm=null,string material="",string? spindle=null,int page=0,int size=20)
+        "Omit unknown geometry to read it from the operation; ask only the returned missing fields. All dimensions in mm. operationUnits is metric or imperial as displayed by ENCY. Use the returned installed ID and Identity for assignment.")]
+    public async Task<string> FindToolsForSelectedOperation(string operationUnits, string? mode = null, double? widthMm = null,
+        double? depthMm = null, int? processId = null, double breakthroughMm = 0, double? innerRadiusMm = null,
+        string material = "", string? spindle = null, int page = 0, int size = 20, bool? noInsideCorner = null)
     {
-        if(size is <1 or >50 || page<0)return "ERROR: invalid page.";
-        var local=await Run("machine-fit",processId,GeometryArgs(operationUnits,mode,widthMm,depthMm,breakthroughMm,innerRadiusMm));
-        if(local.StartsWith("ERROR",StringComparison.Ordinal))return local;
-        var remote=await Replies.WithToken(tokens,async token=> (mode is "slot" or "shoulder"
-            ? await api.FindMills(mode,widthMm,depthMm,innerRadiusMm,material,spindle,page,size,token)
-            : await api.FindDrills(widthMm,depthMm,mode,breakthroughMm,material,page,size,token,spindle)).ToJsonString());
-        return $"On machine: {local}\nWarehouse and catalogue: {remote}";
+        var raw = await Run("operation-context", processId, [operationUnits]);
+        if (raw.StartsWith("ERROR", StringComparison.Ordinal)) return raw;
+        var context = JsonNode.Parse(raw)!.AsObject();
+        var brief = OperationBrief.FromContext(context, mode, widthMm, depthMm, breakthroughMm, innerRadiusMm,
+            noInsideCorner, material, spindle, page, size);
+        return await Replies.WithToken(tokens, async token => {
+            var result = await api.FindOperationTools(brief, token);
+            result["operationId"] = context["operationId"]?.DeepClone();
+            result["projectPath"] = context["projectPath"]?.DeepClone();
+            if (result["status"]?.GetValue<string>() != "ready") return result.ToJsonString();
+            var fit = await Run("machine-fit", context["processId"]?.GetValue<int>() ?? processId,
+                GeometryArgs(operationUnits, brief.Bottom ?? brief.Operation!, (brief.Diameter ?? brief.Width)!.Value,
+                    brief.Depth!.Value, breakthroughMm, brief.InnerRadius));
+            if (fit.StartsWith("ERROR", StringComparison.Ordinal)) return fit;
+            var local = JsonNode.Parse(fit)!.AsObject();
+            if (!JsonNode.DeepEquals(context["operationId"], local["operationId"]) ||
+                !JsonNode.DeepEquals(context["projectPath"], local["projectPath"]))
+                return "ERROR: selected operation changed during the search.";
+            result["installed"] = local["installed"]?.DeepClone();
+            result["assignedTool"] = local["assignedTool"]?.DeepClone();
+            return result.ToJsonString();
+        });
     }
 
     [McpServerTool(Name="assign_installed_operation_tool"),Description("Assign an already installed project or magazine tool, without import. Confirm the target with the user. Repeat the exact search dimensions, ID and Identity from find_tools_for_selected_operation. Does not save the project.")]

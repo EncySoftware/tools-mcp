@@ -28,7 +28,7 @@ internal static partial class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -61,6 +61,12 @@ internal static partial class EncyIpc
             var app = helper.Object("GetRunningCamApp", pid);
             var project = app.Object("GetActiveProject");
             var path = project.Text("GetFilePath");
+            if (args[0] == "operation-context") {
+                var selected = project.Object("GetTechnologist").Object("get_CurrentOperation").Object("get_XMLProp");
+                if (SuitableCycle(selected, true)) args[0] = "mill-context";
+                else if (SuitableCycle(selected, false)) args[0] = "drill-context";
+                else throw new InvalidOperationException("Tool selection supports drilling, slot and shoulder milling. The selected cycle is unsupported.");
+            }
             if(args[0] is "machine-fit" or "machine-assign" or "mill-context")
                 return MachineCommand(args,project,assemblies,path);
             if (args[0] is "drill-context" or "drill-assign" or "mill-assign")
