@@ -35,7 +35,7 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         var libraries = await api.ListLibraries(token);
         if (libraries.Count == 0) return "No libraries yet - create_library makes one.";
         return string.Join("\n", libraries.Select(l =>
-            $"{l.Name} [id {l.Id}] - {l.ItemCount} items ({l.MissingCount} gone from the catalogue), updated "
+            $"{l.Name} [id {l.Id}]{(l.Shared ? $" (shared, {l.Role})" : "")} - {l.ItemCount} items ({l.MissingCount} gone from the catalogue), updated "
             + l.UpdatedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
     });
 
@@ -445,7 +445,7 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
 
     private static string Contents(Library library)
     {
-        var reply = new StringBuilder($"'{library.Name}' [id {library.Id}] holds {library.Items.Count} items:");
+        var reply = new StringBuilder($"'{library.Name}' [id {library.Id}]{(library.Shared ? $" (shared, {library.Role})" : "")} holds {library.Items.Count} items:");
         foreach (var item in library.Items)
         {
             reply.AppendLine();

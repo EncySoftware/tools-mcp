@@ -9,9 +9,12 @@ public record ProjectPlanGeometry(string OperationId, string? Mode = null, doubl
     double? DepthMm = null, double? InnerRadiusMm = null, bool? NoInsideCorner = null,
     double? BreakthroughMm = null, string? Magazine = null, double? BottomRadiusMm = null, double? PassDepthMm = null);
 
+public sealed record ProjectSetupAnswer(string MachineOrSetup, string? Material=null, string? Spindle=null);
+
 internal static class ProjectToolPlan
 {
-    internal static List<PlanRow> Rows(AuditReport audit, IReadOnlyDictionary<string, ProjectPlanGeometry> overrides)
+    internal static List<PlanRow> Rows(AuditReport audit, IReadOnlyDictionary<string, ProjectPlanGeometry> overrides,
+        IReadOnlyDictionary<string,ProjectSetupAnswer>? common=null)
     {
         var rows = new List<PlanRow>();
         foreach (var op in audit.Operations)
@@ -82,7 +85,11 @@ internal static class ProjectToolPlan
                 input.PassDepthMm is double ap && (!double.IsFinite(ap) || ap<=0 || ap>b.Depth || b.Operation!="pocket") ||
                 input.Mode != null && !(holes != null ? input.Mode is "through" or "tip" or "cylinder" : input.Mode is "slot" or "shoulder" or "pocket")))
                 failure = "Invalid geometry override.";
-            var row = new PlanRow(new(op.OperationId, b, op.Machine ?? op.Setup ?? op.OperationId)) { Error = failure };
+            string scope=op.Machine ?? op.Setup ?? op.OperationId;
+            if(common!=null && common.TryGetValue(scope,out var shared))
+                b=b with { Material=string.IsNullOrWhiteSpace(b.Material)?shared.Material:b.Material,
+                    Spindle=string.IsNullOrWhiteSpace(b.Spindle)?shared.Spindle:b.Spindle };
+            var row = new PlanRow(new(op.OperationId, b, scope)) { Error = failure };
             rows.Add(row);
             row.Questions.AddRange(issues);
             if (failure != null || issues.Count > 0 || b.Operation=="pocket") continue;
@@ -130,6 +137,14 @@ internal static class ProjectToolPlan
             installationRequired = rows.Where(r => r.Selected?.Key.Source is "catalogue" or "warehouseAssembly")
                 .Select(r => new { r.Step.OperationId, componentId = r.Selected!.Key.ToolId, r.Selected.Key.AssemblyId,
                     r.Selected.Key.LibraryId, r.Selected.Key.InsertId, next = "Install the chosen tool or assembly and replan using its actual project identity." }),
+            questions = rows.Where(r=>r.Error==null).SelectMany(r=>r.Questions
+                .Select(field=>(r.Step.OperationId,r.Step.Machine,field,required:true))
+                .Concat(includeCatalogue && string.IsNullOrWhiteSpace(r.Step.Geometry.Material)?
+                    [(r.Step.OperationId,r.Step.Machine,"materialForCuttingData",false)]:[])
+                .Concat(includeCatalogue && string.IsNullOrWhiteSpace(r.Step.Geometry.Spindle)?
+                    [(r.Step.OperationId,r.Step.Machine,"spindleForHolderCheck",false)]:[]))
+                .GroupBy(q=>(q.Machine,q.field,q.required))
+                .Select(g=>new {machineOrSetup=g.Key.Machine,g.Key.field,g.Key.required,operations=g.Select(q=>q.OperationId).Distinct()}),
             previewInput = new { audit.ProjectPath, audit.ProcessId, audit.OperationUnits, changes }
         }, AuditOutput.Json);
     }
@@ -144,7 +159,7 @@ public sealed partial class LocalEncyTools
         "Only tools from the known or specified magazine are considered for magazine projects. " +
         "includeCatalogue adds matching personal assemblies and catalogue alternatives after sign-in. previewInput contains only installed replacements for preview_project_tool_changes.")]
     public async Task<string> PlanProjectTools(string operationUnits, int? processId = null, ProjectPlanGeometry[]? geometry = null,
-        bool includeCatalogue = false, int pagesPerOperation = 1)
+        bool includeCatalogue = false, int pagesPerOperation = 1, ProjectSetupAnswer[]? setupAnswers = null)
     {
         if (pagesPerOperation is < 1 or > 10) return "ERROR: pagesPerOperation must be 1 to 10.";
         if (operationUnits is not ("metric" or "imperial")) return "ERROR: specify metric or imperial.";
@@ -161,7 +176,12 @@ public sealed partial class LocalEncyTools
             answers.TryGetValue(supplied.OperationId,out var previous);
             answers[supplied.OperationId]=OperationAnswerStore.Merge(previous,supplied);
         }
-        var rows = ProjectToolPlan.Rows(audit, answers);
+        setupAnswers??=[];
+        var scopes=audit.Operations.Select(op=>op.Machine??op.Setup??op.OperationId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if(setupAnswers.Any(s=>s==null || !scopes.Contains(s.MachineOrSetup)) ||
+            setupAnswers.DistinctBy(s=>s.MachineOrSetup,StringComparer.OrdinalIgnoreCase).Count()!=setupAnswers.Length)
+            return "ERROR: each shared answer must name a distinct machineOrSetup from the project plan.";
+        var rows = ProjectToolPlan.Rows(audit, answers,setupAnswers.ToDictionary(s=>s.MachineOrSetup,StringComparer.OrdinalIgnoreCase));
         foreach(var row in rows.Where(r=>r.Step.Geometry.WidthSource=="user" &&
                 geometry.All(g=>!string.Equals(g.OperationId,r.Step.OperationId,StringComparison.OrdinalIgnoreCase)||g.WidthMm==null)))
             row.RememberedWidth=true;

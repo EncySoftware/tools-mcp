@@ -59,8 +59,8 @@ public record LibraryAssembly(string Id, string? Number, string? Place, IReadOnl
 public record LibraryItem(string? Component, string? Name, string? Kit, bool Present, string? Kind, string? KitName,
     double? DiameterMm, double? LengthMm, CustomTool? Custom, LibraryAssembly? Assembly = null, CatalogueReference? Reference = null);
 public record CatalogueReference(string Article, double? OverallMm, double? UsableMm, double? OutsideShankMm, double? CornerRadiusMm);
-public record Library(string Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<LibraryItem> Items);
-public record LibrarySummary(string Id, string Name, int ItemCount, int MissingCount, DateTimeOffset UpdatedAt);
+public record Library(string Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, IReadOnlyList<LibraryItem> Items, bool Shared=false, string? Role=null);
+public record LibrarySummary(string Id, string Name, int ItemCount, int MissingCount, DateTimeOffset UpdatedAt, bool Shared=false, string? Role=null);
 public record DownloadedFile(string FileName, byte[] Bytes);
 public record ToolListExport(DownloadedFile File, int? Exported, int? LeftOut);
 public record AssemblyPatch(string? Name, string? Number, string? Place, string? Spindle, double? GaugeLengthMm, ShelfSetup? Setup = null);
