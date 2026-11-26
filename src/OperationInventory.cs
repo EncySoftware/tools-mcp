@@ -44,8 +44,8 @@ internal static partial class EncyIpc
     }
 
     private sealed record Installed(string ID,string Identity,string Caption,string Type,double DiameterMm,double ReachMm,
-        double? Angle,string Magazine,int Position,bool Node);
-    private static List<Installed> Inventory(Handle project,double scale) {
+        double? Angle,string Magazine,int Position,bool Node, IReadOnlyList<string>? Adapters = null);
+    private static List<Installed> Inventory(Handle project,double scale, Func<double, bool> needsAngle, bool includeIncomplete = false) {
         var result=new List<Installed>();
         Handle? machine=null;
         if(project.Type.GetMethod("get_MachineTools")!=null){
@@ -59,8 +59,9 @@ internal static partial class EncyIpc
                     var node=mag.Object("GetTool",j);
                     var component=node.Object("GetComponent");
                     var toolType = component.Text("GetToolType");
+                    double diameter = Convert.ToDouble(component.Call("GetDiameter",[]).Value);
                     double? angle = null;
-                    if (InstalledDrillPoint.IsStandardDrill(toolType) && component.Type.GetMethod("GetParameters") != null &&
+                    if (needsAngle(diameter) && InstalledDrillPoint.IsStandardDrill(toolType) && component.Type.GetMethod("GetParameters") != null &&
                         component.Type.GetMethod("GetParameter") != null) {
                         try {
                             angle = InstalledDrillPoint.ReadAngle(component.Strings("GetParameters"),
@@ -71,20 +72,23 @@ internal static partial class EncyIpc
                     }
                     result.Add(new Installed(node.Count("get_NodeID").ToString(CultureInfo.InvariantCulture),
                         Convert.ToString(component.Call("get_ID",[]).Value,CultureInfo.InvariantCulture)??"",node.Text("GetCaption"),toolType,
-                        Convert.ToDouble(component.Call("GetDiameter",[]).Value),Convert.ToDouble(component.Call("GetWorkingLength",[]).Value),
-                        angle,mag.Text("GetName"),node.Count("GetPosition"),true));
+                        diameter,Convert.ToDouble(component.Call("GetWorkingLength",[]).Value),
+                        angle,mag.Text("GetName"),node.Count("GetPosition"),true,
+                        includeIncomplete ? Optional(() => node.Strings("GetAdapters")) : null));
                 }
             }
-            return result;
+            if (!includeIncomplete) return result;
         }
         var tools=project.Object("get_ToolsList");
         for(int i=0;i<tools.Count("get_Count");i++){
             var tool=tools.Object("get_ToolInfo",i);var props=tool.Object("get_ToolProperties");
             double Read(string k)=>props.Count("get_PropExists","Properties."+k)==0?0:Convert.ToDouble(props.Call("GetFloat",["Properties."+k]).Value);
             var limits=new[]{Read("WorkingLength"),Read("ShoulderLength")}.Where(n=>n>0&&double.IsFinite(n)).ToArray();
-            if(limits.Length==0 || !(Read("Length")>0))continue;
+            double length = Read("Length");
+            double reach = limits.Length > 0 && double.IsFinite(length) && length > 0 ? Math.Min(length, limits.Min())*scale : 0;
+            if (!includeIncomplete && reach <= 0) continue;
             result.Add(new Installed(tool.Text("get_ToolID"),tool.Text("get_ToolGUID"),tool.Text("get_ToolCaption"),tool.Text("get_ToolType"),
-                Read("Diameter")*scale,Math.Min(Read("Length"),limits.Min())*scale,Read("Angle"),tool.Text("get_ConnectorID"),tool.Count("get_ToolNumber"),false));
+                Read("Diameter")*scale,reach,Read("Angle"),includeIncomplete ? tool.Count("get_MagazineNumber").ToString(CultureInfo.InvariantCulture) : tool.Text("get_ConnectorID"),tool.Count("get_ToolNumber"),false));
         }
         return result;
     }
@@ -96,8 +100,7 @@ internal static partial class EncyIpc
         double scale=args[2]=="imperial"?25.4:1;
         if(args[0]=="mill-context"){
             if(!SuitableCycle(xml,true))throw new InvalidOperationException("Select a contouring, pocketing or roughing milling operation.");
-            var job=op.Object("get_ModelFormerJobAssignment");var features=new List<Shape?>();
-            for(int i=0;i<job.Count("get_Count");i++)features.Add(FeatureGeometry(project,runtime,job.Object("get_Item",i).Text("get_Caption"),0,scale,true));
+            var features = ReadMillShapes(op, project, runtime, scale);
             const string key="ConditionsSection.Workpiece.Material";
             Console.WriteLine(JsonSerializer.Serialize(new{processId=int.Parse(args[1],CultureInfo.InvariantCulture),projectPath=path,operationId=id,operationName=op.Text("GetName"),
                 material=xml.Count("get_PropExists",key)==0?null:xml.Text("GetString",key),features,availableWidthMm=(double?)null}));
@@ -113,7 +116,7 @@ internal static partial class EncyIpc
             ||(radius is double r && (!double.IsFinite(r)||r<0)))throw new ArgumentException("Invalid search dimensions.");
         double Required(Installed t) => mill || mode == "tip" ? depth :
             InstalledDrillPoint.RequiredDepth(t.DiameterMm, depth, extra, t.Angle) ?? double.PositiveInfinity;
-        var inventory = Inventory(project,scale);
+        var inventory = Inventory(project, scale, d => mode is ("through" or "cylinder") && Math.Abs(d-width) <= 1e-7);
         var results=inventory.Where(t=>{
             var shape=t.Type.Split('.').Last();
             if(!(t.DiameterMm>0 && t.ReachMm>0))return false;

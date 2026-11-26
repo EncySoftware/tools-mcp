@@ -28,7 +28,7 @@ internal static partial class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["audit", _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -61,6 +61,8 @@ internal static partial class EncyIpc
             var app = helper.Object("GetRunningCamApp", pid);
             var project = app.Object("GetActiveProject");
             var path = project.Text("GetFilePath");
+            if (args[0] == "audit")
+                return AuditProject(project, assemblies, path, pid, args[2]);
             if (args[0] == "operation-context") {
                 var selected = project.Object("GetTechnologist").Object("get_CurrentOperation").Object("get_XMLProp");
                 if (SuitableCycle(selected, true)) args[0] = "mill-context";
@@ -99,25 +101,7 @@ internal static partial class EncyIpc
                 }
                 if (args[2] is not ("metric" or "imperial")) throw new ArgumentException("Specify metric or imperial.");
                 var scale = args[2] == "imperial" ? 25.4 : 1;
-                var job=op.Object("get_ModelFormerJobAssignment");
-                var holeType=assemblies.LoadFromAssemblyName(new AssemblyName("CAMIPC.ModelFormerTypes")).GetType("CAMIPC.ModelFormerTypes.ICamIpcHoleModelItem", true)!;
-                var holes=new List<object>();
-                for (int i=0,count=job.Count("get_Count"); i<count; i++)
-                {
-                    var item=job.Object("get_Item",i);
-                    if (!holeType.IsInstanceOfType(item.Value)) { holes.Add(new { unresolved = true }); continue; }
-                    var hole=new Handle(item.Value,holeType);
-                    var diameter=Convert.ToDouble(hole.Call("get_Diameter",[]).Value)*scale;
-                    var depth=(Convert.ToDouble(hole.Call("get_TopLevel",[]).Value)-Convert.ToDouble(hole.Call("get_BottomLevel",[]).Value))*scale;
-                    bool resolved=hole.Call("get_TopLevelMode",[]).Value?.ToString()!="htlmDefault" &&
-                        hole.Call("get_BottomLevelMode",[]).Value?.ToString()!="hblmDefault";
-                    var geometry = FeatureGeometry(project,assemblies,item.Text("get_Caption"),diameter,scale,false);
-                    string? bottom=geometry?.Kind;
-                    if(bottom=="blind") bottom=hole.Call("get_DrillTipCompensation",[]).Value?.ToString() switch
-                    { "hdtNone"=>"tip","hdtToolTip"=>"cylinder",_=>"blind" };
-                    holes.Add(new {bottom,diameterMm=double.IsFinite(diameter)&&diameter>0?(double?)diameter:null,
-                        depthMm=resolved && double.IsFinite(depth)&&depth>0?(double?)depth:null});
-                }
+                var holes = ReadHoles(op, project, assemblies, scale);
                 const string mat="ConditionsSection.Workpiece.Material";
                 var material = xml.Count("get_PropExists",mat)==0 ? null : xml.Text("GetString",mat);
                 var activeTools = xml.Object("GetArray", "ToolSection.Tools");

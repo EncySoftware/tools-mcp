@@ -67,6 +67,45 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         operationUnits is "metric" or "imperial" ? Run("drill-context", processId, [operationUnits])
             : Task.FromResult("ERROR: specify metric or imperial.");
 
+    [McpServerTool(Name = "audit_project_tools", ReadOnly = true), Description(
+        "Review the tools assigned to every operation of the open ENCY project, without changing selection or assignments. " +
+        "Reports per-operation geometry checks for drilling and milling, identical hole groups, reasons for mismatches, " +
+        "unverified dimensions and questions grouped across operations. Units are the project's displayed metric or imperial units. " +
+        "The check covers geometry only; through holes use zero additional breakthrough. No catalogue login required.")]
+    public async Task<string> AuditProjectTools(string operationUnits, int? processId = null,
+        [Description("Optional personal library ID for comparison with project tools. Shelf numbers or names alone do not identify project tools.")] string? libraryId = null)
+    {
+        if (operationUnits is not ("metric" or "imperial")) return "ERROR: specify metric or imperial.";
+        if (libraryId != null && Ids.Of(libraryId) == null) return Ids.NotALibrary(libraryId);
+        var raw = await Run("audit", processId, [operationUnits]);
+        if (libraryId == null || raw.StartsWith("ERROR:", StringComparison.Ordinal)) return raw;
+        return await Replies.WithToken(tokens, async token => {
+            var library = await api.GetLibrary(Ids.Of(libraryId)!, token);
+            if (library == null) return $"ERROR: no library {libraryId}.";
+            var report = System.Text.Json.JsonSerializer.Deserialize<AuditReport>(raw, AuditOutput.Json)!;
+            var result = JsonNode.Parse(raw)!.AsObject();
+            result["personalLibraryComparison"] = System.Text.Json.JsonSerializer.SerializeToNode(new {
+                libraryId = library.Id, libraryName = library.Name, source = "personalLibrary",
+                items = AuditOutput.Compare(library, report.ProjectInventory)
+            }, AuditOutput.Json);
+            return result.ToJsonString();
+        });
+    }
+
+    [McpServerTool(Name = "export_project_setup_sheet"), Description(
+        "Write a UTF-8 CSV tooling setup sheet for the open project to Downloads or an absolute output folder. Lists machine, setup, " +
+        "operation, assigned magazine and T number, tool, adapters, working reach, source, geometry findings and missing fields. " +
+        "Use metric or imperial according to the project. Leaves operation assignments and the project file untouched.")]
+    public async Task<string> ExportProjectSetupSheet(string operationUnits, int? processId = null, string? outputFolder = null)
+    {
+        var raw = await AuditProjectTools(operationUnits, processId);
+        if (raw.StartsWith("ERROR:", StringComparison.Ordinal)) return raw;
+        var report = System.Text.Json.JsonSerializer.Deserialize<AuditReport>(raw, AuditOutput.Json)!;
+        var filename = (Path.GetFileNameWithoutExtension(report.ProjectPath) is {Length: >0} name ? name : "Project") + "-setup.csv";
+        var path = SavedFiles.Save(new DownloadedFile(filename, AuditOutput.SetupCsv(report)), outputFolder);
+        return $"Saved {report.Operations.Count} operation rows: {path}";
+    }
+
     [McpServerTool(Name="get_milling_operation", ReadOnly=true), Description("Read the selected ENCY milling operation and recognized pocket/side height and inside radius. Supply available slot or shoulder width when not specified by geometry.")]
     public Task<string> GetMillingOperation(string operationUnits,int? processId=null) =>
         Run("mill-context",processId,[operationUnits]);

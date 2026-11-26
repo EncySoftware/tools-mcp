@@ -48,6 +48,8 @@ Version 0.7.3 applies an article cutting condition to an operation in the open E
 | `find_tools_for_operation` | Plan a drilling, slot or shoulder operation before opening ENCY. Pass known dimensions in mm. The response lists the missing fields or returns matching tools with available and required reach. |
 | `find_operation_mills` | Slot and shoulder milling. Enter available cutter width, depth and optionally the smallest inside corner radius and spindle interface. Larger fitting square end mills are shown first within each source. Follow `nextCursor` while `hasMore` is true. |
 | `get_milling_operation` (local Windows) | Read the selected operation and recognized feature height and inside radius; unknown dimensions require input. |
+| `audit_project_tools` (local Windows) | Review all project operations, assigned tools, groups of holes, missing geometry and reasons a tool fails. Pass a personal library ID to compare recorded tools and magazine positions. |
+| `export_project_setup_sheet` (local Windows) | Save the open projectвЂ™s tooling setup sheet as a CSV for the operator. |
 | `find_tools_for_selected_operation` (local Windows) | Search installed tools, then matching personal assemblies and catalogue tools. Specify ENCY units. Recognized geometry comes from the selected project. Supply missing dimensions or confirm there is no inside corner. Each match reports required and available reach. |
 | `assign_installed_operation_tool` (local Windows) | Assign an existing project tool or magazine node, without importing it again. Rechecks the project, operation, geometry and tool identity. |
 | `assign_operation_mill` (local Windows) | Import the selected end mill or warehouse assembly into the selected milling operation after confirmation. |
