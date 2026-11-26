@@ -3,6 +3,23 @@ using Xunit;
 
 public class OperationAnswerStoreTests
 {
+    [Fact] public void OneSetupAnswerFillsMissingFieldsWithoutReplacingKnownOperationMaterial()
+    {
+        var op=new ProjectAuditRow("a","Pocket","TSTPocketingOp","steel",null,null,
+            new("needsInput",["width"],[]),new(Operation:"slot",Depth:5,NoInsideCorner:true,Material:"steel"),Machine:"VMC");
+        var other=op with {OperationId="b",Material=null,MillingGeometry=op.MillingGeometry! with {Material=null}};
+        var audit=new AuditReport(1,"test.stcp","metric",0,[op,other],[],[]);
+        var rows=ProjectToolPlan.Rows(audit,new Dictionary<string,ProjectPlanGeometry>(),
+            new Dictionary<string,ProjectSetupAnswer>{{"VMC",new("VMC","aluminium","HSK-A63")}});
+        Assert.Equal("steel",rows[0].Step.Geometry.Material);
+        Assert.Equal("aluminium",rows[1].Step.Geometry.Material);
+        Assert.All(rows,r=>Assert.Equal("HSK-A63",r.Step.Geometry.Spindle));
+        var plan=System.Text.Json.Nodes.JsonNode.Parse(ProjectToolPlan.Result(audit,rows,true))!;
+        var q=Assert.Single(plan["questions"]!.AsArray());
+        Assert.Equal("width",(string?)q!["field"]);
+        Assert.Equal(2,q["operations"]!.AsArray().Count);
+    }
+
     [Fact] public void ReusesOnlyTheSameSavedProjectAndJobGeometry()
     {
         var dir=Directory.CreateTempSubdirectory("project-answers-");
