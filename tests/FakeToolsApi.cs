@@ -6,6 +6,10 @@ internal sealed class FakeToolsApi : IToolsApi
 {
     public Task<System.Text.Json.Nodes.JsonObject> ShelfReplacements(string library,string component,double tolerance,int page,string token) { Saw(nameof(ShelfReplacements),token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
     public Task<System.Text.Json.Nodes.JsonObject> AssemblyGap(string library,string assembly,int after,string token) { Saw(nameof(AssemblyGap),token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
+    public Task<System.Text.Json.Nodes.JsonObject> ReviewCutting(string id,CuttingPass context,string token)
+    { Saw(nameof(ReviewCutting),token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
+    public Task<System.Text.Json.Nodes.JsonObject> SavePersonalCutting(string id,PersonalCuttingInput input,string token)
+    { Saw(nameof(SavePersonalCutting),token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
     public Task<System.Text.Json.Nodes.JsonObject> FindOperationTools(OperationBrief brief, string token)
     { Saw(nameof(FindOperationTools), token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
     public Task<System.Text.Json.Nodes.JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm, string material, int page, int size, string token, string? spindle = null)

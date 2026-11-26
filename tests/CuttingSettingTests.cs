@@ -20,7 +20,9 @@ public class CuttingSettingTests
 
     [Theory]
     [InlineData(true, "rpm", "mm/tooth", 2100, 0.105, 0, 2)]
-    [InlineData(false, "m/min", "mm/rev", 90, 0.12, 1, 1)]
+    // ENCY NB 3: the live DOOSAN operation returns 0 / CSS and 1 / RPM.
+    [InlineData(false, "m/min", "mm/rev", 90, 0.12, 0, 1)]
+    [InlineData(false, "rpm", "mm/min", 1000, 500, 1, 0)]
     public void AppliesSelectedFeedAndSpeed(bool milling, string speedUnit, string feedUnit,
         double speed, double feed, int speedMode, int feedMode)
     {

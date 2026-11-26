@@ -39,8 +39,8 @@ internal sealed record CuttingSetting(string Unit, double Value)
         (true, "mm/min") => MillFeed(0, "ValuePerMinut"),
         (true, "mm/rev") => MillFeed(1, "ValuePerRevolution"),
         (true, "mm/tooth") => MillFeed(2, "ValuePerTooth"),
-        (false, "rpm") => ("SpindleSpeed.LatheSpindleSpeedType", 0, "SpindleSpeed.SpeedRPM"),
-        (false, "m/min") => ("SpindleSpeed.LatheSpindleSpeedType", 1, "SpindleSpeed.LinearSpeed"),
+        (false, "rpm") => ("SpindleSpeed.LatheSpindleSpeedType", 1, "SpindleSpeed.SpeedRPM"),
+        (false, "m/min") => ("SpindleSpeed.LatheSpindleSpeedType", 0, "SpindleSpeed.LinearSpeed"),
         (false, "mm/min") => ("CutFeed.LatheFeedMeasurement", 0, "CutFeed.ValuePerMinut"),
         (false, "mm/rev") => ("CutFeed.LatheFeedMeasurement", 1, "CutFeed.ValuePerRevolution"),
         _ => throw new InvalidOperationException($"Unsupported feed or speed unit for this operation: {Unit}")
@@ -54,6 +54,20 @@ internal sealed record CuttingSetting(string Unit, double Value)
 
     internal double OperationValue(bool imperial) => !imperial || Unit == "rpm" ? Value
         : Unit == "m/min" ? Value / 0.3048 : Value / 25.4;
+
+    internal static (CuttingSetting? Speed,CuttingSetting? Feed) Read(bool mill,bool imperial,Func<string,bool> exists,
+        Func<string,int> mode,Func<string,double> read)
+    {
+        CuttingSetting? speed=null,feed=null;
+        foreach(string unit in new[]{"rpm","m/min","mm/min","mm/rev","mm/tooth"}) {
+            if(!mill && unit=="mm/tooth")continue;
+            var one=new CuttingSetting(unit,1);var p=one.Paths(mill);
+            if(!exists(p.ModePath)||!exists(p.ValuePath)||mode(p.ModePath)!=p.Mode)continue;
+            var v=read(p.ValuePath)/one.OperationValue(imperial);if(!double.IsFinite(v))continue;
+            if(unit is "rpm" or "m/min")speed=new(unit,v);else feed=new(unit,v);
+        }
+        return (speed,feed);
+    }
 
     internal static void Apply(IReadOnlyList<CuttingSetting> pair, bool milling, bool imperial,
         Func<string,bool> exists, Func<string,int> getMode, Action<string,int> setMode,

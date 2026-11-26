@@ -100,6 +100,8 @@ public interface IToolsApi
     Task<Compat?> GetCompat(string id, string token);
     Task<IReadOnlyList<Component>> GetAdapterChain(string first, string second, string token);
     Task<CuttingData?> GetCuttingData(string id, string token);
+    Task<JsonObject> ReviewCutting(string id,CuttingPass context,string token);
+    Task<JsonObject> SavePersonalCutting(string id,PersonalCuttingInput input,string token);
     /** spindle: the machine's, as ENCY's connection library names it (HSK63, SK40, Capto C6); null for any. */
     Task<AssemblyChain?> GetAssembly(string id, string? spindle, string token);
     Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetAcceptsAmong(IReadOnlyList<string> ids, string token);
@@ -200,6 +202,12 @@ public class ToolsApi : IToolsApi
 
     public Task<IReadOnlyList<Component>> GetAdapterChain(string first, string second, string token) =>
         Get<IReadOnlyList<Component>>($"/components/{Esc(first)}/adapter-chain/{Esc(second)}", token);
+
+    public Task<JsonObject> ReviewCutting(string id,CuttingPass context,string token) =>
+        Send<JsonObject>(HttpMethod.Post,"/components/"+Esc(id)+"/cutting-review",token,context);
+
+    public Task<JsonObject> SavePersonalCutting(string id,PersonalCuttingInput input,string token) =>
+        Send<JsonObject>(HttpMethod.Put,"/components/"+Esc(id)+"/personal-cutting",token,input);
 
     public Task<CuttingData?> GetCuttingData(string id, string token) =>
         GetOrNull<CuttingData>($"/components/{Esc(id)}/cutting", token);

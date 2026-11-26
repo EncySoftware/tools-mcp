@@ -7,7 +7,7 @@ namespace ToolsMcp;
 
 /// <summary>One component: its parameters, what fits it, the chain up to the spindle, and its files.</summary>
 [McpServerToolType]
-public class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? files = null)
+public partial class ComponentTools(IToolsApi api, TokenProvider tokens, IFileSink? files = null)
 {
     /** Where a saved file goes: the person's disk at home, a link on the hosted server. */
     private readonly IFileSink _files = files ?? LocalFiles.Instance;

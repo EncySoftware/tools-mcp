@@ -28,7 +28,7 @@ internal static partial class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["tool-plan", _, _] or ["assembly-simulation", _] or ["audit", _, _] or ["planning-audit", _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["cutting-preview", _, _, _, _, _, _, _, _] or ["cutting-context", _, _, _, _] or ["tool-plan", _, _] or ["assembly-simulation", _] or ["audit", _, _] or ["planning-audit", _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -113,7 +113,7 @@ internal static partial class EncyIpc
                     operationName=op.Text("GetName"),operationUnits=args[2],material,holes}));
                 return 0;
             }
-            if (args[0] == "cutting")
+            if (args[0] is "cutting" or "cutting-preview" or "cutting-context")
             {
                 if (string.IsNullOrWhiteSpace(path) || !string.Equals(path, args[2], StringComparison.OrdinalIgnoreCase)
                     || string.IsNullOrWhiteSpace(args[3]) || args[4] is not ("metric" or "imperial"))
@@ -129,11 +129,46 @@ internal static partial class EncyIpc
                     double value = double.Parse(args[i + 1], System.Globalization.CultureInfo.InvariantCulture);
                     settings.Add(new(args[i], value));
                 }
-                CuttingSetting.Apply(settings, Exists("ConditionsSection.Spindle.Speed.Mode"), args[4] == "imperial",
-                    Exists, key => xml.Count("GetInteger", key), (key,v) => xml.Call("SetInteger", [key, v]),
-                    key => Convert.ToDouble(xml.Call("GetFloat", [key]).Value), (key,v) => xml.Call("SetFloat", [key, v]),
-                    () => operation.Call("LoadFromXmlProp", [xml.Value]));
-                Console.WriteLine($"{operation.Text("GetName")} [{args[3]}]: {string.Join(", ", settings)}");
+                bool mill=Exists("ConditionsSection.Spindle.Speed.Mode"),imperial=args[4]=="imperial";
+                (CuttingSetting? Speed,CuttingSetting? Feed) Read()=>CuttingSetting.Read(mill,imperial,Exists,
+                    key=>xml.Count("GetInteger",key),key=>Convert.ToDouble(xml.Call("GetFloat",[key]).Value));
+                var before=Read();
+                if(args[0]=="cutting-context") {
+                    const string materialKey="ConditionsSection.Workpiece.Material";
+                    var reference=Assignment(operation,xml,project.Type.GetMethod("get_MachineTools")==null?null:
+                        assemblies.LoadFromAssemblyName(new AssemblyName("CAMIPC.ToolAssemblies")).GetType("CAMIPC.ToolAssemblies.ICamIpcTechOperationWithToolAssembly"));
+                    double? cssCap=null;
+                    if(!mill && before.Speed?.Unit=="m/min" && Exists("SpindleSpeed.SpeedRPM")){
+                        var n=Convert.ToDouble(xml.Call("GetFloat",["SpindleSpeed.SpeedRPM"]).Value);
+                        if(double.IsFinite(n)&&n>0)cssCap=n;
+                    }
+                    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{projectPath=path,operationId=args[3],
+                        operation=operation.Text("GetName"),operationUnits=args[4],speed=before.Speed,feed=before.Feed,
+                        material=Exists(materialKey)?xml.Text("GetString",materialKey):null,
+                        machine=Optional(()=>operation.Object("get_Machine").Text("get_MachineCaption")),
+                        equipmentNodeId=reference.NodeId,projectToolId=reference.LegacyId,
+                        currentCssMaxRpm=cssCap,cssLimitSource=cssCap==null?null:"Operation SpindleSpeed.SpeedRPM while CSS is active",
+                        machineMaxRpm=(double?)null,machineMaxFeedMmMin=(double?)null,
+                        limitsNote="Machine-wide maxima are not exposed by these verified operation values. Supply documented machine and assembly limits for cutting review."
+                    },AuditOutput.Json));
+                    return 0;
+                }
+                foreach(var requested in settings) {
+                    var p=requested.Paths(mill);
+                    if(!Exists(p.ModePath)||!Exists(p.ValuePath))throw new InvalidOperationException("Operation does not support "+requested.Unit);
+                }
+                bool apply=args[0]=="cutting";
+                if(apply) CuttingSetting.Apply(settings,mill,imperial,Exists,key=>xml.Count("GetInteger",key),
+                    (key,v)=>xml.Call("SetInteger",[key,v]),key=>Convert.ToDouble(xml.Call("GetFloat",[key]).Value),
+                    (key,v)=>xml.Call("SetFloat",[key,v]),()=>{
+                        operation.Call("LoadFromXmlProp",[xml.Value]);
+                        xml=operation.Object("get_XMLProp"); // verify on a fresh operation pointer
+                    });
+                var after=Read();
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new {
+                    status=apply?"applied":"preview",operationId=args[3],operation=operation.Text("GetName"),operationUnits=args[4],
+                    before=new{before.Speed,before.Feed},requested=settings,actual=new{after.Speed,after.Feed},readBack=apply
+                },AuditOutput.Json));
                 return 0;
             }
             var tools = project.Object("get_MachineTools");

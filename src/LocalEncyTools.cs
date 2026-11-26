@@ -29,21 +29,40 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         "Apply a supplier's speed and feed from one article condition to a named ENCY operation. " +
         "Use get_cutting_data for the condition number and list_tool_operations for the operation id. " +
         "Supply the active operation's displayed measurement system (metric or imperial), the exact speed and feed units from the row, " +
-        "and either minimum or maximum. Changes the open project without saving it.")]
+        "and either minimum or maximum. Supply previewOnly=true for before/after preview. For a constrained pass use review_cutting_conditions, its conditionKey and the same context (fixed rpm/mm/min). Applying returns values re-read from ENCY after writing, without saving the project.")]
     public Task<string> ApplyOperationCutting(string id, int condition, string boundary, string speedUnit,
-        string feedUnit, int processId, string projectPath, string operationId, string operationUnits) =>
+        string feedUnit, int processId, string projectPath, string operationId, string operationUnits,
+        CuttingPass? context=null,string? conditionKey=null,string? personalCorrectionId=null,bool previewOnly=false,bool acceptUnverified=false) =>
         Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
             if (boundary is not ("minimum" or "maximum") || operationUnits is not ("metric" or "imperial"))
                 return "ERROR: specify minimum or maximum, and the operation units (metric or imperial).";
-            var rows = (await api.GetCompat(cid, token))?.ArticleCutting;
-            if (rows == null || condition < 1 || condition > rows.Count) return "ERROR: unknown article condition.";
-            var settings = CuttingSetting.FromArticle(rows[condition - 1].Fields, boundary == "maximum")
-                .Where(s => s.Unit == speedUnit || s.Unit == feedUnit).ToList();
-            if (!CuttingSetting.IsPair(settings) || speedUnit is not ("rpm" or "m/min"))
-                return "ERROR: select one available spindle or cutting speed and one available feed from the condition.";
-            return await Run("cutting", processId, [projectPath, operationId, operationUnits,
+            IReadOnlyList<CuttingSetting> settings;
+            if(context!=null) {
+                if(string.IsNullOrWhiteSpace(conditionKey)||speedUnit!="rpm"||feedUnit!="mm/min")
+                    return "ERROR: supply the reviewed condition key; verified fixed pairs use rpm and mm/min.";
+                var review=await api.ReviewCutting(cid,context with {OnlyCondition=condition,Offset=0,Size=1},token);
+                var row=review["items"]?.AsArray().FirstOrDefault(r=>(string?)r?["key"]==conditionKey);
+                if(row==null)return "ERROR: the requested condition has changed or conflicts with this pass.";
+                if(!previewOnly&&!acceptUnverified&&(string?)row["status"]=="partial")
+                    return "ERROR: confirm the unverified pass conditions before applying this row.";
+                System.Text.Json.Nodes.JsonNode? pair;
+                if(personalCorrectionId==null)pair=row["fixedPairs"]?.AsArray().FirstOrDefault(p=>(string?)p?["boundary"]==boundary);
+                else pair=review["personalCorrections"]?.AsArray().FirstOrDefault(p=>(string?)p?["id"]==personalCorrectionId &&
+                    (string?)p?["conditionKey"]==conditionKey && (bool?)p?["withinSuppliedLimits"]==true);
+                if(pair==null)return "ERROR: no verified fixed pair for this boundary, correction and supplied limits.";
+                settings=[new("rpm",(double)pair["rpm"]!),new("mm/min",(double)pair["feedMmMin"]!)];
+            } else {
+                if(conditionKey!=null||personalCorrectionId!=null)return "ERROR: provide the matching pass context.";
+                var rows = (await api.GetCompat(cid, token))?.ArticleCutting;
+                if (rows == null || condition < 1 || condition > rows.Count) return "ERROR: unknown article condition.";
+                settings = CuttingSetting.FromArticle(rows[condition - 1].Fields, boundary == "maximum")
+                    .Where(s => s.Unit == speedUnit || s.Unit == feedUnit).ToList();
+                if (!CuttingSetting.IsPair(settings) || speedUnit is not ("rpm" or "m/min"))
+                    return "ERROR: select one available spindle or cutting speed and one available feed from the condition.";
+            }
+            return await Run(previewOnly?"cutting-preview":"cutting", processId, [projectPath, operationId, operationUnits,
                 .. settings.SelectMany(s => new[] { s.Unit, s.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture) })]);
         });
 
