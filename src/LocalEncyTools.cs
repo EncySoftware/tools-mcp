@@ -177,7 +177,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             return await Run(mill ? "mill-assign" : "drill-assign", processId, [projectPath, operationId, path]);
         });
 
-    private static async Task<string> Run(string operation, int? pid, string[] arguments)
+    private static async Task<string> Run(string operation, int? pid, string[] arguments, string? input = null)
     {
         try
         {
@@ -195,7 +195,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             }
             // Keep each installation's native DLLs and COM objects in a separate short-lived process.
             var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false,
-                RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = input != null, CreateNoWindow = true,
                 StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8 };
             if (Path.GetFileNameWithoutExtension(start.FileName).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
                 start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
@@ -206,16 +206,28 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             using var worker = Process.Start(start) ?? throw new InvalidOperationException("Could not start ENCY IPC.");
             var stdout = worker.StandardOutput.ReadToEndAsync();
             var stderr = worker.StandardError.ReadToEndAsync();
-            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+            async Task SendInput() {
+                if (input == null) return;
+                try { await worker.StandardInput.WriteAsync(input); }
+                catch (IOException) { /* A worker can exit before reading; its own error is on stderr. */ }
+                finally { worker.StandardInput.Close(); }
+            }
+            var write = SendInput();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(operation == "assembly-simulation" ? 15 : 4));
             try { await worker.WaitForExitAsync(timeout.Token); }
             catch (OperationCanceledException)
             {
-                if (!worker.HasExited) worker.Kill();
+                if (!worker.HasExited) worker.Kill(entireProcessTree: operation == "assembly-simulation");
+                if (operation=="tool-plan" && arguments[0]=="apply" && input!=null)
+                    return ProjectToolChangePlan.Interrupted(System.Text.Json.JsonSerializer.Deserialize<ToolPlanRequest>(input,AuditOutput.Json)!,await stderr);
                 return "ERROR: ENCY did not reply in time. Check the magazine before repeating an import.";
             }
+            await write;
             var reply = (await stdout).Trim();
             var detail = (await stderr).Trim();
             if (worker.ExitCode == 0) return reply;
+            if (operation=="tool-plan" && arguments[0]=="apply" && input!=null && detail.Contains(ProjectToolChangePlan.CheckpointPrefix,StringComparison.Ordinal))
+                return ProjectToolChangePlan.Interrupted(System.Text.Json.JsonSerializer.Deserialize<ToolPlanRequest>(input,AuditOutput.Json)!,detail);
             return "ERROR: " + (detail.Length > 0 ? detail : $"ENCY IPC stopped ({worker.ExitCode}). Check the project before retrying.");
         }
         catch (Exception e) { return "ERROR: " + e.Message; }

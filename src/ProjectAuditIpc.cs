@@ -61,21 +61,29 @@ internal static partial class EncyIpc
         catch (Exception e) when (ReadError(e)) { return null; }
     }
 
+    private static (string? NodeId,string? LegacyId) Assignment(Handle op,Handle xml,Type? assemblyType,bool strict=false)
+    {
+        string? Node() {
+            if (assemblyType?.IsInstanceOfType(op.Value)!=true) return null;
+            int n=new Handle(op.Value,assemblyType).Count("get_ToolNodeID");
+            return n<0?null:n.ToString(CultureInfo.InvariantCulture);
+        }
+        string? Legacy() {
+            var array=xml.Object("GetArray","ToolSection.Tools");
+            return array.Count("get_TopItem")<0?null:array.Object("get_Itm",0).Text("GetCalculatedString","ToolID");
+        }
+        var node = strict ? Node() : Optional(Node);
+        return (node, node!=null ? null : strict ? Legacy() : Optional(Legacy));
+    }
+
     private static OperationSnapshot Snapshot(Handle op, Handle project, AssemblyLoadContext runtime, double scale,
-        string? setup, Type? assemblyType)
+        string? setup, Type? assemblyType, bool strictAssignments=false)
     {
         string id = op.Text("GetId"), name = op.Text("GetName");
         var xml = op.Object("get_XMLProp");
         string type = xml.Text("get_Name");
         string? machine = Optional(() => op.Object("get_Machine").Text("get_MachineCaption"));
-        string? nodeId = assemblyType?.IsInstanceOfType(op.Value) == true ? Optional(() => {
-            int n = new Handle(op.Value, assemblyType).Count("get_ToolNodeID");
-            return n < 0 ? null : n.ToString(CultureInfo.InvariantCulture);
-        }) : null;
-        string? legacyId = Optional(() => {
-            var array = xml.Object("GetArray", "ToolSection.Tools");
-            return array.Count("get_TopItem") < 0 ? null : array.Object("get_Itm",0).Text("GetCalculatedString","ToolID");
-        });
+        var (nodeId,legacyId)=Assignment(op,xml,assemblyType,strictAssignments);
         const string mat = "ConditionsSection.Workpiece.Material";
         string? material = Optional(() => xml.Count("get_PropExists", mat) != 0 ? xml.Text("GetString", mat) : null);
         var snapshot = new OperationSnapshot(id,name,type,machine,setup,material,nodeId,legacyId,null,null,null);

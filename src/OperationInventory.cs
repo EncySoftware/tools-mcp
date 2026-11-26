@@ -151,16 +151,23 @@ internal static partial class EncyIpc
             throw new InvalidOperationException("Selected project or operation changed.");
         var choice=results.SingleOrDefault(t=>t.ID==args[10] && !string.IsNullOrWhiteSpace(t.Identity) && t.Identity==args[11])
             ?? throw new InvalidOperationException("Installed tool or geometry changed.");
-        if(choice.Node){
-            var type=runtime.LoadFromAssemblyName(new AssemblyName("CAMIPC.ToolAssemblies")).GetType("CAMIPC.ToolAssemblies.ICamIpcTechOperationWithToolAssembly",true)!;
-            var withTool=new Handle(op.Value,type);int n=int.Parse(choice.ID,CultureInfo.InvariantCulture);
-            withTool.Call("SetTool",[n]); if(withTool.Count("get_ToolNodeID")!=n)throw new InvalidOperationException("Magazine assignment not confirmed.");
-        }else{
-            project.Call("SetOperationTool",[id,choice.ID]);
-            var active=op.Object("get_XMLProp").Object("GetArray","ToolSection.Tools").Object("get_Itm",0);
-            if(active.Text("GetCalculatedString","ToolID")!=choice.ID)throw new InvalidOperationException("Project tool assignment not confirmed.");
-        }
+        SetInstalled(project, runtime, op, id, choice.ID, choice.Node);
         Console.WriteLine($"{op.Text("GetName")} [{id}] → {choice.Magazine} T#{choice.Position} {choice.Caption}");
         return 0;
+    }
+
+    private static void SetInstalled(Handle project,AssemblyLoadContext runtime,Handle op,string id,string toolId,bool node)
+    {
+        if (node) {
+            var type=runtime.LoadFromAssemblyName(new AssemblyName("CAMIPC.ToolAssemblies")).GetType("CAMIPC.ToolAssemblies.ICamIpcTechOperationWithToolAssembly",true)!;
+            var withTool=new Handle(op.Value,type);
+            int n=int.Parse(toolId,CultureInfo.InvariantCulture);
+            withTool.Call("SetTool",[n]);
+            if(withTool.Count("get_ToolNodeID")!=n) throw new InvalidOperationException("Magazine assignment not confirmed.");
+        } else {
+            project.Call("SetOperationTool",[id,toolId]);
+            var active=op.Object("get_XMLProp").Object("GetArray","ToolSection.Tools").Object("get_Itm",0);
+            if(active.Text("GetCalculatedString","ToolID")!=toolId) throw new InvalidOperationException("Project tool assignment not confirmed.");
+        }
     }
 }

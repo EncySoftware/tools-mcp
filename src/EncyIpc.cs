@@ -28,7 +28,7 @@ internal static partial class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["audit", _, _] or ["planning-audit", _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["tool-plan", _, _] or ["assembly-simulation", _] or ["audit", _, _] or ["planning-audit", _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -61,6 +61,8 @@ internal static partial class EncyIpc
             var app = helper.Object("GetRunningCamApp", pid);
             var project = app.Object("GetActiveProject");
             var path = project.Text("GetFilePath");
+            if (args[0] == "tool-plan") return ToolPlanCommand(app, project, assemblies, pid, path, args[2]);
+            if (args[0] == "assembly-simulation") return AssemblySimulation(helper, app, project, assemblies, path);
             if (args[0] is "audit" or "planning-audit")
                 return AuditProject(project, assemblies, path, pid, args[2], args[0] == "planning-audit");
             if (args[0] == "operation-context") {
