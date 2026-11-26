@@ -78,23 +78,27 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             return $"{result}\n{shelf.Summary} GTC: {file}";
         });
 
+    [McpServerTool(Name="get_selected_hole_features",ReadOnly=true),Description("Read ENCY-recognized holes and compound hole stages for selected model geometry before planning operations. Returns reported entrances, thread dimensions and feature-local axial levels in mm. Does not run recognition or modify the model. For a project without a current operation, specify the displayed metric or imperial system.")]
+    public Task<string> GetSelectedHoleFeatures(string operationUnits="auto",int? processId=null) =>
+        Run("selected-hole-features",processId,[operationUnits]);
+
     [McpServerTool(Name = "get_drilling_operation", ReadOnly = true), Description(
         "Read the selected drilling operation, its hole dimensions, material if specified, operation id and project path. " +
-        "Supply metric or imperial according to the project's displayed units. Dimensions returned are mm. " +
-        "Blind/through classification is read from features linked to the assigned faces. Unresolved dimensions or depth references require user input.")]
-    public Task<string> GetDrillingOperation(string operationUnits, int? processId = null) =>
-        operationUnits is "metric" or "imperial" ? Run("drill-context", processId, [operationUnits])
+         "Units default to the selected operation export; supply metric or imperial for older ENCY. Dimensions returned are mm. " +
+        "Face-linked recognition returns simple or compound hole stages, entrance chamfers and thread dimensions when reported by ENCY. Step order follows the model. Unresolved dimensions or depth references require user input.")]
+    public Task<string> GetDrillingOperation(string operationUnits = "auto", int? processId = null) =>
+        operationUnits is "auto" or "metric" or "imperial" ? Run("drill-context", processId, [operationUnits])
             : Task.FromResult("ERROR: specify metric or imperial.");
 
     [McpServerTool(Name = "audit_project_tools", ReadOnly = true), Description(
         "Review the tools assigned to every operation of the open ENCY project, without changing selection or assignments. " +
         "Reports per-operation geometry checks for drilling and milling, identical hole groups, reasons for mismatches, " +
-        "unverified dimensions and questions grouped across operations. Units are the project's displayed metric or imperial units. " +
+         "unverified dimensions and questions grouped across operations. Auto verifies the native export of each operation; pass displayed metric or imperial units to skip exports. " +
         "The check covers geometry only; through holes use zero additional breakthrough. No catalogue login required.")]
-    public async Task<string> AuditProjectTools(string operationUnits, int? processId = null,
+    public async Task<string> AuditProjectTools(string operationUnits = "auto", int? processId = null,
         [Description("Optional personal library ID for comparison with project tools. Shelf numbers or names alone do not identify project tools.")] string? libraryId = null)
     {
-        if (operationUnits is not ("metric" or "imperial")) return "ERROR: specify metric or imperial.";
+        if (operationUnits is not ("auto" or "metric" or "imperial")) return "ERROR: specify auto, metric or imperial.";
         if (libraryId != null && Ids.Of(libraryId) == null) return Ids.NotALibrary(libraryId);
         var raw = await Run("audit", processId, [operationUnits]);
         if (libraryId == null || raw.StartsWith("ERROR:", StringComparison.Ordinal)) return raw;
@@ -115,7 +119,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         "Write a UTF-8 CSV tooling setup sheet for the open project to Downloads or an absolute output folder. Lists machine, setup, " +
         "operation, assigned magazine and T number, tool, adapters, working reach, source, geometry findings and missing fields. " +
         "Use metric or imperial according to the project. Leaves operation assignments and the project file untouched.")]
-    public async Task<string> ExportProjectSetupSheet(string operationUnits, int? processId = null, string? outputFolder = null)
+    public async Task<string> ExportProjectSetupSheet(string operationUnits = "auto", int? processId = null, string? outputFolder = null)
     {
         var raw = await AuditProjectTools(operationUnits, processId);
         if (raw.StartsWith("ERROR:", StringComparison.Ordinal)) return raw;
@@ -126,7 +130,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     }
 
     [McpServerTool(Name="get_milling_operation", ReadOnly=true), Description("Read the selected ENCY milling operation. Recognized geometry can provide pocket/side height, inside radius and available cutter width in mm. widthSource identifies a rectangular inside contour, a rectangular pocket floor or parallel walls of a recognized slot. bottomRadiusMm comes from the recognized closed-bottom pocket; zero is a verified square floor corner, null requires clarification. Check bottomRadiusSource.")]
-    public Task<string> GetMillingOperation(string operationUnits,int? processId=null) =>
+    public Task<string> GetMillingOperation(string operationUnits="auto",int? processId=null) =>
         Run("mill-context",processId,[operationUnits]);
 
     private static string[] GeometryArgs(string units,string mode,double width,double depth,double extra,double? radius) =>
@@ -136,8 +140,8 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     [McpServerTool(Name="find_tools_for_selected_operation", ReadOnly=true), Description(
         "Search the selected project's installed magazine/tools first, then matching warehouse assemblies and catalogue cutters. " +
         "mode: tip/cylinder/through for drilling, slot/shoulder for milling. widthMm is the exact hole diameter or available milling width. " +
-        "Omit unknown geometry to read it from the operation; ask only the returned missing fields. All dimensions in mm. operationUnits is metric or imperial as displayed by ENCY. Tools in unverified lack a value needed to confirm the fit. Use ID and Identity from installed for assignment.")]
-    public async Task<string> FindToolsForSelectedOperation(string operationUnits, string? mode = null, double? widthMm = null,
+        "Omit unknown geometry to read it from the operation; ask only the returned missing fields. All dimensions in mm. operationUnits defaults to auto, read from the selected operation. Tools in unverified lack a value needed to confirm the fit. Use ID and Identity from installed for assignment.")]
+    public async Task<string> FindToolsForSelectedOperation(string operationUnits = "auto", string? mode = null, double? widthMm = null,
         double? depthMm = null, int? processId = null, double breakthroughMm = 0, double? innerRadiusMm = null,
         string material = "", string? spindle = null, int page = 0, int size = 20, bool? noInsideCorner = null,
         double? bottomRadiusMm = null,double? passDepthMm = null)
@@ -154,6 +158,13 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         return await Replies.WithToken(tokens, async token => {
             var result = await api.FindOperationTools(brief, token);
             result["operationId"] = context["operationId"]?.DeepClone();
+            result["operationUnits"] = context["operationUnits"]?.DeepClone();
+            result["unitsSource"] = context["unitsSource"]?.DeepClone();
+            if(context["holes"] is JsonArray holes) {
+                var features=holes.SelectMany(h=>h?["recognized"] as JsonArray ?? []).Where(h=>h!=null)
+                    .DistinctBy(h=>h!["assignedNode"]?.ToString()+"|"+h["featureId"]?.ToString());
+                result["recognizedHoleGeometry"]=new JsonArray(features.Select(h=>h!.DeepClone()).ToArray());
+            }
             if (context.ContainsKey("features"))
                 result["widthSource"] = widthMm.HasValue ? "user" : context["widthSource"]?.DeepClone();
             result["projectPath"] = context["projectPath"]?.DeepClone();
@@ -164,7 +175,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             }
             if (result["status"]?.GetValue<string>() != "ready") return result.ToJsonString();
             var fit = await Run("machine-fit", context["processId"]?.GetValue<int>() ?? processId,
-                GeometryArgs(operationUnits, brief.Bottom ?? brief.Operation!, (brief.Diameter ?? brief.Width)!.Value,
+                GeometryArgs(context["operationUnits"]!.GetValue<string>(), brief.Bottom ?? brief.Operation!, (brief.Diameter ?? brief.Width)!.Value,
                     brief.Depth!.Value, breakthroughMm, brief.InnerRadius));
             if (fit.StartsWith("ERROR", StringComparison.Ordinal)) return fit;
             var local = JsonNode.Parse(fit)!.AsObject();

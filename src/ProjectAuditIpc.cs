@@ -18,8 +18,12 @@ internal static partial class EncyIpc
         for (int i = 0, count = job.Count("get_Count"); i < count; i++)
         {
             var item = job.Object("get_Item", i);
+            var recognized=new List<RecognizedHole>();
             if (!holeType.IsInstanceOfType(item.Value)) {
-                holes.Add(new(null, null, null, true));
+                // A face assigned to an FBM drilling operation need not expose the hole model-item interface.
+                // Keep model stages alongside the unresolved assignment rather than assuming its machining depth.
+                FeatureGeometry(project,runtime,item.Text("get_Caption"),double.NaN,scale,false,recognized);
+                holes.Add(new(null,null,null,true,recognized.Count>0?recognized:null));
                 continue;
             }
             var hole = new Handle(item.Value, holeType);
@@ -28,12 +32,12 @@ internal static partial class EncyIpc
                 Convert.ToDouble(hole.Call("get_BottomLevel", []).Value)) * scale;
             bool levelsKnown = hole.Call("get_TopLevelMode", []).Value?.ToString() != "htlmDefault" &&
                 hole.Call("get_BottomLevelMode", []).Value?.ToString() != "hblmDefault";
-            var shape = FeatureGeometry(project, runtime, item.Text("get_Caption"), d, scale, false);
+            var shape = FeatureGeometry(project, runtime, item.Text("get_Caption"), d, scale, false,recognized);
             string? bottom = shape?.Kind;
             if (bottom == "blind") bottom = hole.Call("get_DrillTipCompensation", []).Value?.ToString() switch {
                 "hdtNone" => "tip", "hdtToolTip" => "cylinder", _ => "blind"
             };
-            holes.Add(new(PositiveMm(d), levelsKnown ? PositiveMm(depth) : null, bottom));
+            holes.Add(new(PositiveMm(d), levelsKnown ? PositiveMm(depth) : null, bottom, Recognized:recognized.Count>0?recognized:null));
         }
         return holes;
     }
@@ -115,8 +119,8 @@ internal static partial class EncyIpc
 
     private static int AuditProject(Handle project, AssemblyLoadContext runtime, string path, int pid, string units, bool forPlanning = false)
     {
-        if (units is not ("metric" or "imperial")) throw new ArgumentException("Specify metric or imperial.");
-        double scale = units == "metric" ? 1 : 25.4;
+        if (units is not ("auto" or "metric" or "imperial")) throw new ArgumentException("Specify auto, metric or imperial.");
+        string? verified = units=="auto" ? null : units;
         var tech = project.Object("GetTechnologist");
         var enumType = tech.Type.GetMethod("GetOperations")!.GetParameters()[0].ParameterType;
         var iter = tech.Object("GetOperations", Enum.ToObject(enumType, 0));
@@ -130,8 +134,13 @@ internal static partial class EncyIpc
             if (iter.Count("MoveToChild") == 0) return;
             do {
                 var op = iter.Object("Current");
-                var s = Snapshot(op, project, runtime, scale, setup, assemblyType);
-                bool group = s.Type.EndsWith("Group",StringComparison.OrdinalIgnoreCase);
+                bool group = op.Object("get_XMLProp").Text("get_Name").EndsWith("Group",StringComparison.OrdinalIgnoreCase);
+                if(units=="auto" && !group){
+                    var current=ResolveOperationUnits(tech,op,"auto",verifySelection:false);
+                    if(verified!=null && current!=verified)throw new InvalidOperationException("Operations use different measurement systems. Inspect them individually.");
+                    verified=current;
+                }
+                var s = Snapshot(op, project, runtime, verified=="imperial"?25.4:1, setup, assemblyType);
                 if (!group) operations.Add(s);
                 VisitChildren(s.Type == "TSTStageOpGroup" ? s.Name : setup);
             } while (iter.Count("MoveToSibling") != 0);
@@ -139,6 +148,8 @@ internal static partial class EncyIpc
         }
         VisitChildren(null);
 
+        if(verified==null)throw new InvalidOperationException("No operation declares units for the project inventory. Specify metric or imperial.");
+        double scale=verified=="imperial"?25.4:1;
         var drillingDiameters = operations.Where(s => s.Holes != null).SelectMany(s => s.Holes!)
             .Where(h => h.Bottom is "through" or "cylinder" && h.DiameterMm.HasValue).Select(h => h.DiameterMm!.Value).Distinct().ToArray();
         bool NeedsDrillAngle(double d) => forPlanning || drillingDiameters.Any(required => Math.Abs(d-required) <= 1e-7);
@@ -164,7 +175,8 @@ internal static partial class EncyIpc
                 review.Missing.Add("assignedToolGeometry");
                 review.Reasons.Add(new("assignedIdNotInInventory"));
             }
-            rows.Add(new(s.Id,s.Name,s.Type,s.Material,assignedId,cutter,review,s.Mill,s.Machine,s.Setup,s.Error));
+            var features=s.Holes?.SelectMany(h=>h.Recognized??[]).DistinctBy(h=>(h.AssignedNode,h.FeatureId)).ToArray();
+            rows.Add(new(s.Id,s.Name,s.Type,s.Material,assignedId,cutter,review,s.Mill,s.Machine,s.Setup,s.Error,features?.Length>0?features:null));
         }
         var searchable = rows.Where(r => r.Review.Status is "fitsGeometry" or "needsInput" or "mismatch").ToList();
         var noMaterial = searchable.Where(r => string.IsNullOrWhiteSpace(r.Material)).Select(r=>r.OperationId).ToArray();
@@ -174,8 +186,8 @@ internal static partial class EncyIpc
         bool? modified=null;
         try { modified=project.Count("GetIsModified")!=0; }
         catch(Exception e) when (ReadError(e)) { }
-        var report = new AuditReport(pid,path,units,0,rows,inventory.Select(Describe).ToList(),
-            ProjectToolAudit.Questions(rows),catalogueQuestions.ToArray(),modified);
+        var report = new AuditReport(pid,path,verified,0,rows,inventory.Select(Describe).ToList(),
+            ProjectToolAudit.Questions(rows),catalogueQuestions.ToArray(),modified,units=="auto"?"verifiedOperationExports":"caller");
         Console.WriteLine(JsonSerializer.Serialize(report, AuditOutput.Json));
         return 0;
     }

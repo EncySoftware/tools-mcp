@@ -13,7 +13,7 @@ internal static partial class EncyIpc
              or "TSTPocketingOp" or "TSTRoughingWaterlineOp" or "TSTPlaneWaterlineOp"
         : xml.Count("get_PropExists","DrillingType")!=0 && xml.Count("GetInteger","DrillingType") is >=0 and <=3;
 
-    private static Shape? FeatureGeometry(Handle project, AssemblyLoadContext runtime, string path, double diameter, double scale, bool mill)
+    private static Shape? FeatureGeometry(Handle project, AssemblyLoadContext runtime, string path, double diameter, double scale, bool mill, List<RecognizedHole>? recognized = null)
     {
         if(!path.Contains('\\'))return null;
         try {
@@ -21,6 +21,10 @@ internal static partial class EncyIpc
             var matrix=finder.Type.GetMethod("GetFeaturesForNode")!.GetParameters()[2].ParameterType;
             if(matrix.IsByRef)matrix=matrix.GetElementType()!;
             var list=finder.Object("GetFeaturesForNode",path,false,Activator.CreateInstance(matrix));
+            if (!mill && recognized != null) {
+                try { recognized.AddRange(RecognizedHoles(list,runtime,path,diameter,scale)); }
+                catch (Exception e) when (ReadError(e) || e is InvalidDataException) { /* Legacy recognition remains available. */ }
+            }
             var type=runtime.LoadFromAssemblyName(new AssemblyName("CAMIPC.FeatureFinder"))
                 .GetType("CAMIPC.FeatureFinder."+(mill?"ICamIpcPocketFeature":"ICamIpcHoleFeature"),true)!;
             var found=new HashSet<Shape>();
@@ -108,14 +112,17 @@ internal static partial class EncyIpc
     private static int MachineCommand(string[] args,Handle project,AssemblyLoadContext runtime,string path){
         var tech=project.Object("GetTechnologist");var op=tech.Object("get_CurrentOperation");var xml=op.Object("get_XMLProp");
         var id=op.Text("GetId");
-        if(args[2] is not ("metric" or "imperial"))throw new ArgumentException("Specify metric or imperial.");
-        double scale=args[2]=="imperial"?25.4:1;
+        if(args[0]=="mill-context" && !SuitableCycle(xml,true))
+            throw new InvalidOperationException("Select a contouring, pocketing or roughing milling operation.");
+        string units=args[0]=="mill-context" ? ResolveOperationUnits(tech,op,args[2]) : args[2];
+        if(units is not ("metric" or "imperial"))throw new ArgumentException("Specify metric or imperial.");
+        double scale=units=="imperial"?25.4:1;
         if(args[0]=="mill-context"){
-            if(!SuitableCycle(xml,true))throw new InvalidOperationException("Select a contouring, pocketing or roughing milling operation.");
             var geometry = ReadMillGeometry(op, project, runtime, scale);
             const string key="ConditionsSection.Workpiece.Material";
             Console.WriteLine(JsonSerializer.Serialize(new{processId=int.Parse(args[1],CultureInfo.InvariantCulture),projectPath=path,operationId=id,operationName=op.Text("GetName"),
                 material=xml.Count("get_PropExists",key)==0?null:xml.Text("GetString",key),
+                operationUnits=units,unitsSource=args[2]=="auto"?"operationExport":"caller",
                 features=geometry.Features,availableWidthMm=geometry.AvailableWidthMm,widthSource=geometry.WidthSource,
                 bottomRadiusMm=geometry.BottomRadiusMm,bottomRadiusSource=geometry.BottomRadiusMm.HasValue?"recognizedPocketFeature":null}));
             return 0;

@@ -130,8 +130,11 @@ internal static class ProjectToolPlan
         return JsonSerializer.Serialize(new
         {
             audit.ProjectPath,
+            recognizedHoleGeometry=audit.Operations.Where(op=>op.RecognizedHoles?.Length>0)
+                .Select(op=>new {op.OperationId,features=op.RecognizedHoles}),
             audit.ProcessId,
             audit.OperationUnits,
+            audit.UnitsSource,
             includeCatalogue,
             plan,
             installationRequired = rows.Where(r => r.Selected?.Key.Source is "catalogue" or "warehouseAssembly")
@@ -158,11 +161,11 @@ public sealed partial class LocalEncyTools
         "Optionally supply missing drilling or milling dimensions by operation ID (mm); mode tip/cylinder/through or slot/shoulder. " +
         "Only tools from the known or specified magazine are considered for magazine projects. " +
         "includeCatalogue adds matching personal assemblies and catalogue alternatives after sign-in. previewInput contains only installed replacements for preview_project_tool_changes.")]
-    public async Task<string> PlanProjectTools(string operationUnits, int? processId = null, ProjectPlanGeometry[]? geometry = null,
+    public async Task<string> PlanProjectTools(string operationUnits = "auto", int? processId = null, ProjectPlanGeometry[]? geometry = null,
         bool includeCatalogue = false, int pagesPerOperation = 1, ProjectSetupAnswer[]? setupAnswers = null)
     {
         if (pagesPerOperation is < 1 or > 10) return "ERROR: pagesPerOperation must be 1 to 10.";
-        if (operationUnits is not ("metric" or "imperial")) return "ERROR: specify metric or imperial.";
+        if (operationUnits is not ("auto" or "metric" or "imperial")) return "ERROR: specify auto, metric or imperial.";
         var raw = await Run("planning-audit", processId, [operationUnits]);
         if (raw.StartsWith("ERROR", StringComparison.Ordinal)) return raw;
         var audit = JsonSerializer.Deserialize<AuditReport>(raw, AuditOutput.Json)!;

@@ -6,7 +6,8 @@ internal sealed record HoleReading(
     [property: JsonPropertyName("diameterMm")] double? DiameterMm,
     [property: JsonPropertyName("depthMm")] double? DepthMm,
     [property: JsonPropertyName("bottom")] string? Bottom,
-    [property: JsonPropertyName("unresolved"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Unresolved = false);
+    [property: JsonPropertyName("unresolved"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Unresolved = false,
+    [property: JsonPropertyName("recognized"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<RecognizedHole>? Recognized = null);
 
 internal sealed record AuditCutter(string Id, string Name, string Type, double? DiameterMm, double? ReachMm,
     double? PointAngleDegrees, string Magazine, int Position, string Source, IReadOnlyList<string>? Adapters = null, string? PointAngleState = null, string? Identity = null);
@@ -15,10 +16,10 @@ internal sealed record HoleGroup(double? DiameterMm, double? DepthMm, string? Bo
 internal sealed record AuditReason(string Code, double? ActualMm = null, double? RequiredMm = null);
 internal sealed record GeometryReview(string Status, List<string> Missing, List<AuditReason> Reasons, HoleGroup[]? HoleGroups = null, double? RequiredReachMm = null);
 internal sealed record ProjectAuditRow(string OperationId, string OperationName, string OperationType, string? Material,
-    string? AssignedId, AuditCutter? AssignedTool, GeometryReview Review, OperationBrief? MillingGeometry = null, string? Machine = null, string? Setup = null, string? Error = null);
+    string? AssignedId, AuditCutter? AssignedTool, GeometryReview Review, OperationBrief? MillingGeometry = null, string? Machine = null, string? Setup = null, string? Error = null, RecognizedHole[]? RecognizedHoles = null);
 
 internal sealed record AuditReport(int ProcessId, string ProjectPath, string OperationUnits, double AdditionalBreakthroughMm,
-    List<ProjectAuditRow> Operations, List<AuditCutter> ProjectInventory, AuditQuestion[] Questions, AuditQuestion[]? CatalogueQuestions = null, bool? ProjectModified = null);
+    List<ProjectAuditRow> Operations, List<AuditCutter> ProjectInventory, AuditQuestion[] Questions, AuditQuestion[]? CatalogueQuestions = null, bool? ProjectModified = null, string? UnitsSource = null);
 internal sealed record AuditQuestion(string Field, string[] OperationIds);
 
 internal static class ProjectToolAudit
@@ -27,7 +28,7 @@ internal static class ProjectToolAudit
     {
         var missing = new HashSet<string>();
         var reasons = new List<AuditReason>();
-        var groups = holes.GroupBy(h => h)
+        var groups = holes.GroupBy(h => new { h.DiameterMm, h.DepthMm, h.Bottom, h.Unresolved })
             .Select(g => new HoleGroup(g.Key.DiameterMm, g.Key.DepthMm, g.Key.Bottom, g.Key.Unresolved, g.Count())).ToArray();
         bool correctType = cutter != null && InstalledDrillPoint.IsStandardDrill(cutter.Type);
         if (cutter == null) missing.Add("assignedTool");

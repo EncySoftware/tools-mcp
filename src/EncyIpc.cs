@@ -28,7 +28,7 @@ internal static partial class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["cutting-preview", _, _, _, _, _, _, _, _] or ["cutting-context", _, _, _, _] or ["tool-plan", _, _] or ["assembly-simulation", _] or ["audit", _, _] or ["planning-audit", _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["cutting-preview", _, _, _, _, _, _, _, _] or ["cutting-context", _, _, _, _] or ["tool-plan", _, _] or ["assembly-simulation", _] or ["audit", _, _] or ["planning-audit", _, _] or ["selected-hole-features", _, _] or ["operation-context", _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -65,6 +65,7 @@ internal static partial class EncyIpc
             if (args[0] == "assembly-simulation") return AssemblySimulation(helper, app, project, assemblies, path);
             if (args[0] is "audit" or "planning-audit")
                 return AuditProject(project, assemblies, path, pid, args[2], args[0] == "planning-audit");
+            if (args[0] == "selected-hole-features") return SelectedHoleFeatures(project, assemblies,pid,path,args[2]);
             if (args[0] == "operation-context") {
                 var selected = project.Object("GetTechnologist").Object("get_CurrentOperation").Object("get_XMLProp");
                 if (SuitableCycle(selected, true)) args[0] = "mill-context";
@@ -101,8 +102,8 @@ internal static partial class EncyIpc
                     Console.WriteLine($"Assigned project tool {imported[0]} to {op.Text("GetName")} [{id}].");
                     return 0;
                 }
-                if (args[2] is not ("metric" or "imperial")) throw new ArgumentException("Specify metric or imperial.");
-                var scale = args[2] == "imperial" ? 25.4 : 1;
+                string units=ResolveOperationUnits(tech,op,args[2]);
+                var scale = units == "imperial" ? 25.4 : 1;
                 var holes = ReadHoles(op, project, assemblies, scale);
                 const string mat="ConditionsSection.Workpiece.Material";
                 var material = xml.Count("get_PropExists",mat)==0 ? null : xml.Text("GetString",mat);
@@ -110,7 +111,8 @@ internal static partial class EncyIpc
                 string? toolId = activeTools.Count("get_TopItem") < 0 ? null :
                     activeTools.Object("get_Itm", 0).Text("GetCalculatedString", "ToolID");
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new {processId=pid,projectPath=path,operationId=id,toolId,
-                    operationName=op.Text("GetName"),operationUnits=args[2],material,holes}));
+                    operationName=op.Text("GetName"),operationUnits=units,unitsSource=args[2]=="auto"?"operationExport":"caller",material,holes},
+                    new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
                 return 0;
             }
             if (args[0] is "cutting" or "cutting-preview" or "cutting-context")
