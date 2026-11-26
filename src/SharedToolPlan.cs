@@ -13,6 +13,7 @@ internal sealed class PlanRow(PlanStep step)
     internal PlanStep Step { get; } = step;
     internal List<PlanHit> Hits { get; } = [];
     internal PlanHit? Selected { get; set; }
+    internal bool RememberedWidth { get; set; }
     internal List<string> Questions { get; } = [];
     internal List<string> Unchecked { get; } = [];
     internal string? Scope { get; set; }
@@ -78,7 +79,7 @@ internal static class SharedToolPlan
             return new
             {
                 row.Step.OperationId,
-                row.Step.Geometry,
+                geometry = row.RememberedWidth ? row.Step.Geometry with { WidthSource = "remembered" } : row.Step.Geometry,
                 selection = hit,
                 status = hit != null ? "candidate" : row.Error != null ? "error" : row.Questions.Count > 0 ? "needs_input" :
                     row.NextOffset.HasValue ? "more_candidates_available" : "no_verified_match",

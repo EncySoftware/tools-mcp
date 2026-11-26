@@ -165,8 +165,11 @@ internal static partial class EncyIpc
         var catalogueQuestions = new List<AuditQuestion>();
         if (noMaterial.Length > 0) catalogueQuestions.Add(new("workpieceMaterialForCuttingData",noMaterial));
         if (searchable.Count > 0) catalogueQuestions.Add(new("spindleInterfaceForHolderCheck",searchable.Select(r=>r.OperationId).ToArray()));
+        bool? modified=null;
+        try { modified=project.Count("GetIsModified")!=0; }
+        catch(Exception e) when (ReadError(e)) { }
         var report = new AuditReport(pid,path,units,0,rows,inventory.Select(Describe).ToList(),
-            ProjectToolAudit.Questions(rows),catalogueQuestions.ToArray());
+            ProjectToolAudit.Questions(rows),catalogueQuestions.ToArray(),modified);
         Console.WriteLine(JsonSerializer.Serialize(report, AuditOutput.Json));
         return 0;
     }

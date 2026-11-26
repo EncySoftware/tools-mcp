@@ -7,7 +7,7 @@ namespace ToolsMcp;
 
 public record ProjectPlanGeometry(string OperationId, string? Mode = null, double? WidthMm = null,
     double? DepthMm = null, double? InnerRadiusMm = null, bool? NoInsideCorner = null,
-    double BreakthroughMm = 0, string? Magazine = null);
+    double? BreakthroughMm = null, string? Magazine = null);
 
 internal static class ProjectToolPlan
 {
@@ -68,8 +68,8 @@ internal static class ProjectToolPlan
             }
             else failure ??= "Automatic project extraction is unavailable for this cycle. Use an explicit geometry request.";
             if (b.Depth == null) issues.Add("depth");
-            if (input != null && (!double.IsFinite(input.BreakthroughMm) || input.BreakthroughMm < 0 ||
-                input.BreakthroughMm != 0 && b.Bottom != "through" ||
+            if (input != null && (input.BreakthroughMm is double breakthrough && (!double.IsFinite(breakthrough) || breakthrough < 0) ||
+                input.BreakthroughMm is >0 && b.Bottom != "through" ||
                 input.WidthMm is <= 0 || input.DepthMm is <= 0 || input.InnerRadiusMm is < 0 ||
                 input.InnerRadiusMm != null && input.NoInsideCorner == true ||
                 holes != null && (input.InnerRadiusMm != null || input.NoInsideCorner == true) ||
@@ -148,7 +148,16 @@ public sealed partial class LocalEncyTools
         if (geometry.Any(o => o == null || !audit.Operations.Any(r => string.Equals(r.OperationId, o.OperationId, StringComparison.OrdinalIgnoreCase))) ||
             geometry.DistinctBy(o => o.OperationId, StringComparer.OrdinalIgnoreCase).Count() != geometry.Length)
             return "ERROR: each override must identify one distinct operation in the current project.";
-        var rows = ProjectToolPlan.Rows(audit, geometry.ToDictionary(g => g.OperationId, StringComparer.OrdinalIgnoreCase));
+        var answers=!string.IsNullOrWhiteSpace(audit.ProjectPath) && Path.IsPathFullyQualified(audit.ProjectPath)
+            ? OperationAnswerStore.For(audit).Read(audit) : new Dictionary<string,ProjectPlanGeometry>(StringComparer.OrdinalIgnoreCase);
+        foreach(var supplied in geometry) {
+            answers.TryGetValue(supplied.OperationId,out var previous);
+            answers[supplied.OperationId]=OperationAnswerStore.Merge(previous,supplied);
+        }
+        var rows = ProjectToolPlan.Rows(audit, answers);
+        foreach(var row in rows.Where(r=>r.Step.Geometry.WidthSource=="user" &&
+                geometry.All(g=>!string.Equals(g.OperationId,r.Step.OperationId,StringComparison.OrdinalIgnoreCase)||g.WidthMm==null)))
+            row.RememberedWidth=true;
         if (!includeCatalogue) return ProjectToolPlan.Result(audit, rows);
         return await Replies.WithToken(tokens, async token =>
         {
