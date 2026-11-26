@@ -45,7 +45,7 @@ internal sealed class OperationAnswerStore(string directory)
     internal static ProjectPlanGeometry Merge(ProjectPlanGeometry? old,ProjectPlanGeometry next) => old==null?next:next with {
         Mode=next.Mode??old.Mode,BreakthroughMm=next.BreakthroughMm??(next.Mode is null or "through"?old.BreakthroughMm:null),WidthMm=next.WidthMm??old.WidthMm,DepthMm=next.DepthMm??old.DepthMm,
         InnerRadiusMm=next.NoInsideCorner==true?null:next.InnerRadiusMm??old.InnerRadiusMm,
-        NoInsideCorner=next.InnerRadiusMm.HasValue?false:next.NoInsideCorner??old.NoInsideCorner,Magazine=next.Magazine??old.Magazine
+        NoInsideCorner=next.InnerRadiusMm.HasValue?false:next.NoInsideCorner??old.NoInsideCorner,Magazine=next.Magazine??old.Magazine,BottomRadiusMm=next.BottomRadiusMm??old.BottomRadiusMm,PassDepthMm=next.PassDepthMm??old.PassDepthMm
     };
     internal string Remember(AuditReport report,ProjectPlanGeometry answer)
     {

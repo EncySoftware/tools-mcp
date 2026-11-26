@@ -38,7 +38,12 @@ internal static partial class EncyIpc
         return holes;
     }
 
-    private sealed record MillGeometry(List<Shape?> Features, double? AvailableWidthMm, string? WidthSource);
+    private sealed record MillGeometry(List<Shape?> Features, double? AvailableWidthMm, string? WidthSource)
+    {
+        // A single form-matched pass needs the same known floor radius on every assigned pocket.
+        public double? BottomRadiusMm => Features.Count>0 && Features.All(s=>s?.Kind=="pocket" && s.BottomRadius.HasValue) &&
+            Features.Select(s=>s!.BottomRadius).Distinct().Count()==1 ? Features[0]!.BottomRadius : null;
+    }
 
     private static MillGeometry ReadMillGeometry(Handle op, Handle project, AssemblyLoadContext runtime, double scale)
     {
@@ -98,7 +103,8 @@ internal static partial class EncyIpc
             if (SuitableCycle(xml,true)) {
                 var geometry = ReadMillGeometry(op,project,runtime,scale);
                 var context = new JsonObject { ["features"] = JsonSerializer.SerializeToNode(geometry.Features),
-                    ["availableWidthMm"] = geometry.AvailableWidthMm, ["widthSource"] = geometry.WidthSource };
+                    ["availableWidthMm"] = geometry.AvailableWidthMm, ["widthSource"] = geometry.WidthSource,
+                    ["bottomRadiusMm"]=geometry.BottomRadiusMm,["bottomRadiusSource"]=geometry.BottomRadiusMm.HasValue?"recognizedPocketFeature":null };
                 return snapshot with { Mill = OperationBrief.FromContext(context,null,null,null,0,null,null,material ?? "",null,0,20) };
             }
             return SuitableCycle(xml,false) ? snapshot with { Holes = ReadHoles(op,project,runtime,scale) } : snapshot;

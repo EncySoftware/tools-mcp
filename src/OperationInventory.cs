@@ -7,7 +7,7 @@ namespace ToolsMcp;
 
 internal static partial class EncyIpc
 {
-    private sealed record Shape(string Kind,double Height,double? Corner = null);
+    private sealed record Shape(string Kind,double Height,double? Corner = null,double? BottomRadius = null);
     private static bool SuitableCycle(Handle xml,bool mill) => mill
         ? xml.Text("get_Name") is "TST2DContouringOp" or "TST25DContouringOp" or "TST25DPocketingOp"
              or "TSTPocketingOp" or "TSTRoughingWaterlineOp" or "TSTPlaneWaterlineOp"
@@ -32,7 +32,19 @@ internal static partial class EncyIpc
                     double height=Number("Height")*scale;
                     if(mill && height>0) {
                         double radius=Number("MinCornerRadius")*scale;
-                        found.Add(new Shape(shape.Call("get_PocketType",[]).Value?.ToString()=="captSide"?"shoulder":"pocket",height,radius>0?radius:null));
+                        string kind=shape.Call("get_PocketType",[]).Value?.ToString() switch {
+                            "captPocket"=>"pocket", "captSide"=>"shoulder", "captBoss"=>"boss", _=>"unknown"};
+                        double? floor=null;
+                        if(kind=="pocket" && shape.Type.GetMethod("get_BottomRadius")!=null && shape.Type.GetMethod("get_IsThroughFeature")!=null){
+                            try {
+                                if(shape.Count("get_IsThroughFeature")!=0) kind="throughPocket";
+                                else {
+                                    var raw=shape.Call("get_BottomRadius",[]).Value;
+                                    if(raw is double value && double.IsFinite(value) && value>=0) floor=value*scale;
+                                }
+                            } catch(Exception e) when(ReadError(e)){ /* optional on older ENCY versions */ }
+                        }
+                        found.Add(new Shape(kind,height,radius>0?radius:null,floor));
                     } else if(!mill && height>0 && Math.Abs(Number("Diameter")*scale-diameter)<1e-5)
                         found.Add(new Shape(shape.Count("get_IsBlind")!=0?"blind":"through",height));
                 }
@@ -104,7 +116,8 @@ internal static partial class EncyIpc
             const string key="ConditionsSection.Workpiece.Material";
             Console.WriteLine(JsonSerializer.Serialize(new{processId=int.Parse(args[1],CultureInfo.InvariantCulture),projectPath=path,operationId=id,operationName=op.Text("GetName"),
                 material=xml.Count("get_PropExists",key)==0?null:xml.Text("GetString",key),
-                features=geometry.Features,availableWidthMm=geometry.AvailableWidthMm,widthSource=geometry.WidthSource}));
+                features=geometry.Features,availableWidthMm=geometry.AvailableWidthMm,widthSource=geometry.WidthSource,
+                bottomRadiusMm=geometry.BottomRadiusMm,bottomRadiusSource=geometry.BottomRadiusMm.HasValue?"recognizedPocketFeature":null}));
             return 0;
         }
         string mode=args[3];

@@ -21,4 +21,14 @@ public sealed class OperationBriefTests
         Assert.Null(b.InnerRadius);
         Assert.Null(b.Width);
     }
+    [Fact] public void PocketFloorPreservesAnExplicitZeroAndProvenance() {
+        var flat=Read("""{"features":[{"Kind":"pocket","Height":4,"Corner":3,"BottomRadius":0}],"bottomRadiusMm":0,"bottomRadiusSource":"recognizedPocketFeature"}""");
+        Assert.Equal("pocket",flat.Operation);
+        Assert.Equal(0,flat.BottomRadius);
+        Assert.Equal("recognizedPocketFeature",flat.BottomRadiusSource);
+        var mixed=Read("""{"features":[{"Kind":"pocket","Height":4,"BottomRadius":2},null]}""");
+        Assert.Null(mixed.BottomRadius);
+        Assert.NotEqual("pocket",mixed.Operation);
+        Assert.NotEqual("pocket",Read("""{"features":[{"Kind":"boss","Height":4}]}""").Operation);
+    }
 }

@@ -52,6 +52,23 @@ public class ToolsApiTests
     }
 
     [Fact]
+    public async Task AdvancedMillingPassesFloorAndSurfaceConstraintsWithoutDroppingZero()
+    {
+        var stub=new StubHandler().OnJson("GET","/api/operation-tools","{}");
+        await StubHandler.Api(stub).FindOperationTools(new OperationBrief("pocket",Width:8,Depth:10,
+            NoInsideCorner:true,BottomRadius:0,PassDepth:2),"token");
+        string url=stub.Requests.Single().Uri.OriginalString;
+        Assert.Contains("bottomRadius=0",url);
+        Assert.Contains("passDepth=2",url);
+        Assert.DoesNotContain("surfaceRadius=",url);
+        var surface=new StubHandler().OnJson("GET","/api/operation-tools","{}");
+        await StubHandler.Api(surface).FindOperationTools(new OperationBrief("surface3d",Width:6,Depth:3,
+            ToolShape:"ball",SurfaceRadius:4),"token");
+        Assert.Contains("toolShape=ball",surface.Requests.Single().Uri.OriginalString);
+        Assert.Contains("surfaceRadius=4",surface.Requests.Single().Uri.OriginalString);
+    }
+
+    [Fact]
     public async Task SearchSendsOnlyTheFiltersGivenUnderTheApisNames()
     {
         var stub = new StubHandler().OnJson("GET", "/api/components", """{"total":0,"page":0,"size":50,"items":[]}""");

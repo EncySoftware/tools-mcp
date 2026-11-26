@@ -7,7 +7,7 @@ namespace ToolsMcp;
 
 public record ProjectPlanGeometry(string OperationId, string? Mode = null, double? WidthMm = null,
     double? DepthMm = null, double? InnerRadiusMm = null, bool? NoInsideCorner = null,
-    double? BreakthroughMm = null, string? Magazine = null);
+    double? BreakthroughMm = null, string? Magazine = null, double? BottomRadiusMm = null, double? PassDepthMm = null);
 
 internal static class ProjectToolPlan
 {
@@ -51,7 +51,8 @@ internal static class ProjectToolPlan
             {
                 if (input?.WidthMm > b.Width || input?.DepthMm < b.Depth || input?.InnerRadiusMm > b.InnerRadius ||
                     input?.NoInsideCorner == true && b.InnerRadius != null ||
-                    input?.Mode != null && b.Operation is "shoulder" or "slot" && input.Mode != b.Operation)
+                    input?.BottomRadiusMm is double suppliedFloor && b.BottomRadius is double knownFloor && Math.Abs(suppliedFloor-knownFloor)>1e-7 ||
+                    input?.Mode != null && b.Operation is "shoulder" or "slot" or "pocket" && input.Mode != b.Operation)
                     failure = "Supplied geometry conflicts with the recognized milling feature.";
                 b = b with
                 {
@@ -60,9 +61,13 @@ internal static class ProjectToolPlan
                     WidthSource = input?.WidthMm.HasValue == true ? "user" : b.WidthSource,
                     Depth = input?.DepthMm ?? b.Depth,
                     InnerRadius = input?.InnerRadiusMm ?? b.InnerRadius,
-                    NoInsideCorner = input?.NoInsideCorner ?? b.NoInsideCorner
+                    NoInsideCorner = input?.NoInsideCorner ?? b.NoInsideCorner,
+                    BottomRadius = input?.BottomRadiusMm ?? b.BottomRadius,
+                    BottomRadiusSource = input?.BottomRadiusMm.HasValue==true ? "user" : b.BottomRadiusSource,
+                    PassDepth = input?.PassDepthMm ?? b.PassDepth
                 };
-                if (b.Operation is not ("slot" or "shoulder")) issues.Add("operation");
+                if (b.Operation is not ("slot" or "shoulder" or "pocket")) issues.Add("operation");
+                if (b.Operation=="pocket" && b.BottomRadius==null) issues.Add("bottomRadius");
                 if (b.Width == null) issues.Add("width");
                 if (b.InnerRadius == null && b.NoInsideCorner != true) issues.Add("innerRadiusOrNoCorner");
             }
@@ -73,12 +78,14 @@ internal static class ProjectToolPlan
                 input.WidthMm is <= 0 || input.DepthMm is <= 0 || input.InnerRadiusMm is < 0 ||
                 input.InnerRadiusMm != null && input.NoInsideCorner == true ||
                 holes != null && (input.InnerRadiusMm != null || input.NoInsideCorner == true) ||
-                input.Mode != null && !(holes != null ? input.Mode is "through" or "tip" or "cylinder" : input.Mode is "slot" or "shoulder")))
+                input.BottomRadiusMm is double fr && (!double.IsFinite(fr) || fr<0 || b.Operation!="pocket") ||
+                input.PassDepthMm is double ap && (!double.IsFinite(ap) || ap<=0 || ap>b.Depth || b.Operation!="pocket") ||
+                input.Mode != null && !(holes != null ? input.Mode is "through" or "tip" or "cylinder" : input.Mode is "slot" or "shoulder" or "pocket")))
                 failure = "Invalid geometry override.";
             var row = new PlanRow(new(op.OperationId, b, op.Machine ?? op.Setup ?? op.OperationId)) { Error = failure };
             rows.Add(row);
             row.Questions.AddRange(issues);
-            if (failure != null || issues.Count > 0) continue;
+            if (failure != null || issues.Count > 0 || b.Operation=="pocket") continue;
             var magazine = input?.Magazine ?? op.AssignedTool?.Magazine;
             foreach (var tool in audit.ProjectInventory)
             {

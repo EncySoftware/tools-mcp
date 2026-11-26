@@ -106,7 +106,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         return $"Saved {report.Operations.Count} operation rows: {path}";
     }
 
-    [McpServerTool(Name="get_milling_operation", ReadOnly=true), Description("Read the selected ENCY milling operation. Recognized geometry can provide pocket/side height, inside radius and available cutter width in mm. widthSource identifies a rectangular inside contour, a rectangular pocket floor or parallel walls of a recognized slot. Ask for width if unresolved.")]
+    [McpServerTool(Name="get_milling_operation", ReadOnly=true), Description("Read the selected ENCY milling operation. Recognized geometry can provide pocket/side height, inside radius and available cutter width in mm. widthSource identifies a rectangular inside contour, a rectangular pocket floor or parallel walls of a recognized slot. bottomRadiusMm comes from the recognized closed-bottom pocket; zero is a verified square floor corner, null requires clarification. Check bottomRadiusSource.")]
     public Task<string> GetMillingOperation(string operationUnits,int? processId=null) =>
         Run("mill-context",processId,[operationUnits]);
 
@@ -120,19 +120,29 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         "Omit unknown geometry to read it from the operation; ask only the returned missing fields. All dimensions in mm. operationUnits is metric or imperial as displayed by ENCY. Tools in unverified lack a value needed to confirm the fit. Use ID and Identity from installed for assignment.")]
     public async Task<string> FindToolsForSelectedOperation(string operationUnits, string? mode = null, double? widthMm = null,
         double? depthMm = null, int? processId = null, double breakthroughMm = 0, double? innerRadiusMm = null,
-        string material = "", string? spindle = null, int page = 0, int size = 20, bool? noInsideCorner = null)
+        string material = "", string? spindle = null, int page = 0, int size = 20, bool? noInsideCorner = null,
+        double? bottomRadiusMm = null,double? passDepthMm = null)
     {
         var raw = await Run("operation-context", processId, [operationUnits]);
         if (raw.StartsWith("ERROR", StringComparison.Ordinal)) return raw;
         var context = JsonNode.Parse(raw)!.AsObject();
         var brief = OperationBrief.FromContext(context, mode, widthMm, depthMm, breakthroughMm, innerRadiusMm,
             noInsideCorner, material, spindle, page, size);
+        if(bottomRadiusMm.HasValue && brief.BottomRadius.HasValue && Math.Abs(bottomRadiusMm.Value-brief.BottomRadius.Value)>1e-7)
+            return "ERROR: supplied floor radius conflicts with the recognized pocket.";
+        if(bottomRadiusMm.HasValue) brief=brief with{BottomRadius=bottomRadiusMm,BottomRadiusSource="user"};
+        if(passDepthMm.HasValue) brief=brief with{PassDepth=passDepthMm};
         return await Replies.WithToken(tokens, async token => {
             var result = await api.FindOperationTools(brief, token);
             result["operationId"] = context["operationId"]?.DeepClone();
             if (context.ContainsKey("features"))
                 result["widthSource"] = widthMm.HasValue ? "user" : context["widthSource"]?.DeepClone();
             result["projectPath"] = context["projectPath"]?.DeepClone();
+            if(brief.Operation=="pocket"){
+                result["bottomRadiusSource"]=brief.BottomRadiusSource;
+                result["installedFitScope"]="Catalogue only: this ENCY inventory does not verify installed cutter corner radii.";
+                return result.ToJsonString();
+            }
             if (result["status"]?.GetValue<string>() != "ready") return result.ToJsonString();
             var fit = await Run("machine-fit", context["processId"]?.GetValue<int>() ?? processId,
                 GeometryArgs(operationUnits, brief.Bottom ?? brief.Operation!, (brief.Diameter ?? brief.Width)!.Value,

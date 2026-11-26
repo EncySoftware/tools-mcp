@@ -66,11 +66,15 @@ internal static class ProjectToolAudit
     {
         var missing = new HashSet<string>();
         var reasons = new List<AuditReason>();
-        if (b.Operation is not ("slot" or "shoulder")) missing.Add("millingStrategy");
+        if (b.Operation is not ("slot" or "shoulder" or "pocket")) missing.Add("millingStrategy");
         if (b.Width == null) missing.Add("width");
         if (b.InnerRadius == null && b.NoInsideCorner != true) missing.Add("innerRadiusOrNoCorner");
         if (b.Depth == null) missing.Add("depth");
         if (cutter == null) missing.Add("assignedTool");
+        else if (b.Operation=="pocket") {
+            if(b.BottomRadius==null)missing.Add("bottomRadius");
+            missing.Add("installedCutterCornerRadius");
+        }
         else if (!cutter.Type.Split('.').Last().Equals("EndMill", StringComparison.OrdinalIgnoreCase)) {
             // Pocket and contour operations can legitimately use a ball or toroidal cutter.
             // A square-end-mill search cannot assess such an assignment.

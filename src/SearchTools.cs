@@ -16,16 +16,21 @@ public partial class SearchTools(IToolsApi api, TokenProvider tokens)
         "For slot/shoulder use width and innerRadius or confirm noInsideCorner. Drilling and milling can match saved assemblies. " +
         "For turning/grooving give side (external/internal; grooves also face), hand, and depth. Grooves need width. " +
         "Internal and face operations need diameter. Optional axialReach, holderInterface and insertId constrain access and tooling. " +
+        "For pocket use width, depth, bottomRadius and innerRadius or noInsideCorner. For surface3d specify width, depth, surfaceRadius and toolShape ball/torus. " +
+        "Optional passDepth separates axial engagement from overall depth. For internal ISO metric threadmilling use nominal diameter, pitch, pilotDiameter, depth, blind/through and pilotDepth if blind. " +
+        "indexable_milling uses width and axial depth per pass; indexable_drilling uses hole diameter, depth and drilling depth reference. Both can check an explicit insertId and return a verified body and insert quantity. " +
         "Hole finishing checks catalogue geometry; consult scope and uncheckedFilters for machine/material constraints. " +
         "offset is the zero-based drilling page, otherwise use the returned nextCursor.")]
     public Task<string> FindToolsForOperation(string? operation = null, double? diameter = null, double? width = null,
         double? depth = null, string? bottom = null, double? breakthrough = null, double? innerRadius = null,
         bool? noInsideCorner = null, string? material = null, string? spindle = null, int offset = 0, int size = 20,
         double? pilotDiameter = null, double? pilotDepth = null, double? includedAngle = null, double? pitch = null, string? hand = null, string? tolerance = null,
-        string? side = null, string? holderInterface = null, string? insertId = null, double? axialReach = null) =>
+        string? side = null, string? holderInterface = null, string? insertId = null, double? axialReach = null,
+        double? bottomRadius = null, double? surfaceRadius = null, string? toolShape = null, double? passDepth = null) =>
         Replies.WithToken(tokens, async token => (await api.FindOperationTools(new(operation, diameter, width, depth,
             bottom, breakthrough, innerRadius, noInsideCorner, material, spindle, offset, size,
-            pilotDiameter, pilotDepth, includedAngle, pitch, hand, tolerance, side, holderInterface, insertId, axialReach), token)).ToJsonString());
+            pilotDiameter, pilotDepth, includedAngle, pitch, hand, tolerance, side, holderInterface, insertId, axialReach,
+            bottomRadius,surfaceRadius,toolShape,passDepth), token)).ToJsonString());
 
     [McpServerTool(Name = "find_operation_mills", ReadOnly = true), Description(
         "Find square end mills for slot or shoulder milling by available cutter width, axial depth and optional inside corner radius (mm). " +

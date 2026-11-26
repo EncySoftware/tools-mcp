@@ -7,9 +7,11 @@ public sealed record OperationBrief(string? Operation = null, double? Diameter =
     bool? NoInsideCorner = null, string? Material = null, string? Spindle = null, int Offset = 0, int Size = 20,
     double? PilotDiameter = null, double? PilotDepth = null, double? IncludedAngle = null, double? Pitch = null,
     string? Hand = null, string? Tolerance = null, string? Side = null, string? HolderInterface = null,
-    string? InsertId = null, double? AxialReach = null)
+    string? InsertId = null, double? AxialReach = null, double? BottomRadius = null, double? SurfaceRadius = null,
+    string? ToolShape = null, double? PassDepth = null)
 {
     public string? WidthSource { get; init; }
+    public string? BottomRadiusSource { get; init; }
     internal static OperationBrief FromContext(JsonObject context, string? mode, double? width, double? depth,
         double breakthrough, double? radius, bool? noInsideCorner, string material, string? spindle, int offset, int size)
     {
@@ -27,9 +29,12 @@ public sealed record OperationBrief(string? Operation = null, double? Diameter =
         var heights = Numbers(shapes, "Height");
         var corners = Numbers(shapes, "Corner");
         bool shoulder = shapes.Count > 0 && shapes.All(s => s?["Kind"]?.GetValue<string>() == "shoulder");
-        return new(mode ?? (shoulder ? "shoulder" : "milling"), null, width ?? context["availableWidthMm"]?.GetValue<double>(),
+        bool pocket=shapes.Count>0 && shapes.All(s=>s?["Kind"]?.GetValue<string>()=="pocket");
+        return new(mode ?? (shoulder ? "shoulder" : pocket ? "pocket" : "milling"), null, width ?? context["availableWidthMm"]?.GetValue<double>(),
             depth ?? heights?.Max(), null, null, radius ?? (noInsideCorner == true ? null : corners?.Min()), noInsideCorner,
-            material, spindle, offset, size) { WidthSource = width.HasValue ? "user" : context["widthSource"]?.GetValue<string>() };
+            material, spindle, offset, size) { WidthSource = width.HasValue ? "user" : context["widthSource"]?.GetValue<string>(),
+                BottomRadius = mode is null or "pocket" && pocket ? context["bottomRadiusMm"]?.GetValue<double>() : null,
+                BottomRadiusSource = mode is null or "pocket" && pocket ? context["bottomRadiusSource"]?.GetValue<string>() : null };
     }
 
     private static double[]? Numbers(JsonArray entries, string field)
