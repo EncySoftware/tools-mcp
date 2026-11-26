@@ -45,7 +45,7 @@ Version 0.7.3 applies an article cutting condition to an operation in the open E
 | `export_assembly` | Downloads one saved assembly as an ENCY `.sc12tool` file. |
 | `update_assembly` | Changes the name, T number, place, spindle or measured gauge length of a saved assembly. |
 | `find_adapter_chain` | Finds a direct fit or a shortest chain of catalogued adapters between two component IDs, in either order. Resolve part numbers with `find_components` first. |
-| `find_tools_for_operation` | Plan a drilling, slot or shoulder operation before opening ENCY. Pass known dimensions in mm. The response lists the missing fields or returns matching tools with available and required reach. |
+| `find_tools_for_operation` | Plan drilling, slot/shoulder milling, countersinking, metric tapping and reaming before opening ENCY. Pass known dimensions in mm. The response lists missing geometry or returns matches. Hole finishing screens catalogue geometry and identifies unchecked constraints. |
 | `find_operation_mills` | Slot and shoulder milling. Enter available cutter width, depth and optionally the smallest inside corner radius and spindle interface. Larger fitting square end mills are shown first within each source. Follow `nextCursor` while `hasMore` is true. |
 | `get_milling_operation` (local Windows) | Read the selected operation and recognized feature height and inside radius; unknown dimensions require input. |
 | `audit_project_tools` (local Windows) | Review all project operations, assigned tools, groups of holes, missing geometry and reasons a tool fails. Pass a personal library ID to compare recorded tools and magazine positions. |

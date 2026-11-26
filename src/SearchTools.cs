@@ -13,8 +13,9 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
         "operation: drilling, milling, slot, shoulder, countersinking, tapping or reaming. For drilling use diameter and bottom tip/cylinder/through. " +
         "Countersinking uses outside diameter, pilotDiameter and full includedAngle in degrees. For metric tapping use pitch (mm) and hand right/left. " +
         "For reaming use finished diameter and tolerance (e.g. H7). Tapping and reaming use depth, pilotDiameter, bottom through/blind and pilotDepth for blind holes. "  +
-        "for milling use width and the smallest innerRadius or confirm noInsideCorner. Matches include actual and required reach and warehouse assemblies. " +
-        "offset is the zero-based drill page or returned milling nextCursor.")]
+        "For slot/shoulder use width and innerRadius or confirm noInsideCorner. Drilling and milling can match saved assemblies. " +
+        "Hole finishing checks catalogue geometry; consult scope and uncheckedFilters for machine/material constraints. " +
+        "offset is the zero-based drilling page, otherwise use the returned nextCursor.")]
     public Task<string> FindToolsForOperation(string? operation = null, double? diameter = null, double? width = null,
         double? depth = null, string? bottom = null, double? breakthrough = null, double? innerRadius = null,
         bool? noInsideCorner = null, string? material = null, string? spindle = null, int offset = 0, int size = 20,
