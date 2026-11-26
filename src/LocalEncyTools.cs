@@ -78,7 +78,7 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     [McpServerTool(Name="find_tools_for_selected_operation", ReadOnly=true), Description(
         "Search the selected project's installed magazine/tools first, then matching warehouse assemblies and catalogue cutters. " +
         "mode: tip/cylinder/through for drilling, slot/shoulder for milling. widthMm is the exact hole diameter or available milling width. " +
-        "Omit unknown geometry to read it from the operation; ask only the returned missing fields. All dimensions in mm. operationUnits is metric or imperial as displayed by ENCY. Use the returned installed ID and Identity for assignment.")]
+        "Omit unknown geometry to read it from the operation; ask only the returned missing fields. All dimensions in mm. operationUnits is metric or imperial as displayed by ENCY. Tools in unverified lack a value needed to confirm the fit. Use ID and Identity from installed for assignment.")]
     public async Task<string> FindToolsForSelectedOperation(string operationUnits, string? mode = null, double? widthMm = null,
         double? depthMm = null, int? processId = null, double breakthroughMm = 0, double? innerRadiusMm = null,
         string material = "", string? spindle = null, int page = 0, int size = 20, bool? noInsideCorner = null)
@@ -103,6 +103,7 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
                 return "ERROR: selected operation changed during the search.";
             result["installed"] = local["installed"]?.DeepClone();
             result["assignedTool"] = local["assignedTool"]?.DeepClone();
+            result["unverified"] = local["unverified"]?.DeepClone();
             return result.ToJsonString();
         });
     }

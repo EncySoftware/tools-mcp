@@ -35,7 +35,7 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
         "Find standard drills by exact hole diameter and verified working reach in mm. " +
         "Matching saved assemblies in the caller's warehouse come first. bottom=tip measures to the point, " +
         "cylinder measures full-diameter blind depth, through adds point length and breakthroughMm. " +
-        "For cylinder/through the supplier must give a point angle. Optional spindle filters known incompatible holders; unknown interfaces are marked. Material accepts published grade, number or ISO group. " +
+        "For cylinder/through, use the supplier's axial point length or calculate it from the included point angle. Optional spindle filters known incompatible holders; unknown interfaces are marked. Material accepts published grade, number or ISO group. " +
         "Material data is shown only when available and permitted. Results include component and shelf/assembly IDs for assign_operation_drill.")]
     public Task<string> FindOperationDrills(double diameterMm, double depthMm, string bottom = "tip",
         double breakthroughMm = 0, string material = "", int page = 0, int size = 20, string? spindle = null) =>

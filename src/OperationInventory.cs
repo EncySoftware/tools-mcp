@@ -58,10 +58,21 @@ internal static partial class EncyIpc
                 for(int j=0;j<mag.Count("GetToolsCount");j++){
                     var node=mag.Object("GetTool",j);
                     var component=node.Object("GetComponent");
+                    var toolType = component.Text("GetToolType");
+                    double? angle = null;
+                    if (InstalledDrillPoint.IsStandardDrill(toolType) && component.Type.GetMethod("GetParameters") != null &&
+                        component.Type.GetMethod("GetParameter") != null) {
+                        try {
+                            angle = InstalledDrillPoint.ReadAngle(component.Strings("GetParameters"),
+                                key => (double)component.Call("GetParameter", [key]).Value!);
+                        } catch (Exception e) when (e is InvalidOperationException or TargetInvocationException or System.Runtime.InteropServices.COMException) {
+                            // Optional geometry: the tool remains available for tip-referenced searches.
+                        }
+                    }
                     result.Add(new Installed(node.Count("get_NodeID").ToString(CultureInfo.InvariantCulture),
-                        Convert.ToString(component.Call("get_ID",[]).Value,CultureInfo.InvariantCulture)??"",node.Text("GetCaption"),component.Text("GetToolType"),
+                        Convert.ToString(component.Call("get_ID",[]).Value,CultureInfo.InvariantCulture)??"",node.Text("GetCaption"),toolType,
                         Convert.ToDouble(component.Call("GetDiameter",[]).Value),Convert.ToDouble(component.Call("GetWorkingLength",[]).Value),
-                        null,mag.Text("GetName"),node.Count("GetPosition"),true));
+                        angle,mag.Text("GetName"),node.Count("GetPosition"),true));
                 }
             }
             return result;
@@ -100,14 +111,14 @@ internal static partial class EncyIpc
         if(mode is not ("slot" or "shoulder" or "tip" or "cylinder" or "through") || !double.IsFinite(width)||width<=0
             || !double.IsFinite(depth)||depth<=0||!double.IsFinite(extra)||extra<0||(mode!="through"&&extra!=0)
             ||(radius is double r && (!double.IsFinite(r)||r<0)))throw new ArgumentException("Invalid search dimensions.");
-        double Required(Installed t) => mill || mode=="tip" ? depth : t.Angle is >0 and <=180
-            ? depth+extra+(t.Angle==180?0:t.DiameterMm/(2*Math.Tan(Math.PI*t.Angle.Value/360))) : double.PositiveInfinity;
+        double Required(Installed t) => mill || mode == "tip" ? depth :
+            InstalledDrillPoint.RequiredDepth(t.DiameterMm, depth, extra, t.Angle) ?? double.PositiveInfinity;
         var inventory = Inventory(project,scale);
         var results=inventory.Where(t=>{
             var shape=t.Type.Split('.').Last();
             if(!(t.DiameterMm>0 && t.ReachMm>0))return false;
             if(mill)return shape.Equals("EndMill",StringComparison.OrdinalIgnoreCase) && t.DiameterMm<=width && (radius==null||t.DiameterMm<=2*radius)&&t.ReachMm>=depth;
-            if(!shape.Equals("Drill",StringComparison.OrdinalIgnoreCase)||Math.Abs(t.DiameterMm-width)>1e-7)return false;
+            if(!InstalledDrillPoint.IsStandardDrill(t.Type)||Math.Abs(t.DiameterMm-width)>1e-7)return false;
             return t.ReachMm >= Required(t);
         }).ToList();
         if(args[0]=="machine-fit"){
@@ -124,7 +135,13 @@ internal static partial class EncyIpc
                 current.ID, current.Caption, current.Position, current.DiameterMm, current.ReachMm,
                 matchesGeometry = results.Contains(current)
             };
-            Console.WriteLine(JsonSerializer.Serialize(new{projectPath=path,operationId=id,installed,assignedTool}));
+            var unverified = inventory.Where(t => mode is ("through" or "cylinder") &&
+                InstalledDrillPoint.IsStandardDrill(t.Type) && Math.Abs(t.DiameterMm-width) <= 1e-7 && t.ReachMm >= depth + extra &&
+                !InstalledDrillPoint.ValidAngle(t.Angle)).Select(t => new {
+                    t.ID, t.Identity, t.Caption, t.Position, t.Magazine, t.DiameterMm, t.ReachMm,
+                    reasonCode = "missingPointAngle", reason = "The installed drill's point angle is unknown."
+                });
+            Console.WriteLine(JsonSerializer.Serialize(new{projectPath=path,operationId=id,installed,assignedTool,unverified}));
             return 0;
         }
         if(string.IsNullOrWhiteSpace(path)||!string.Equals(path,args[8],StringComparison.OrdinalIgnoreCase)||!string.Equals(id,args[9],StringComparison.OrdinalIgnoreCase))
