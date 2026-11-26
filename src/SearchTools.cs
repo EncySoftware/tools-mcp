@@ -10,14 +10,18 @@ public class SearchTools(IToolsApi api, TokenProvider tokens)
 {
     [McpServerTool(Name = "find_tools_for_operation", ReadOnly = true), Description(
         "Plan tool selection before creating an ENCY operation. Send known geometry in mm and ask only the questions in missing. " +
-        "operation is drilling, milling (strategy unknown), slot or shoulder. For drilling use diameter and bottom tip/cylinder/through; " +
+        "operation: drilling, milling, slot, shoulder, countersinking, tapping or reaming. For drilling use diameter and bottom tip/cylinder/through. " +
+        "Countersinking uses outside diameter, pilotDiameter and full includedAngle in degrees. For metric tapping use pitch (mm) and hand right/left. " +
+        "For reaming use finished diameter and tolerance (e.g. H7). Tapping and reaming use depth, pilotDiameter, bottom through/blind and pilotDepth for blind holes. "  +
         "for milling use width and the smallest innerRadius or confirm noInsideCorner. Matches include actual and required reach and warehouse assemblies. " +
         "offset is the zero-based drill page or returned milling nextCursor.")]
     public Task<string> FindToolsForOperation(string? operation = null, double? diameter = null, double? width = null,
         double? depth = null, string? bottom = null, double? breakthrough = null, double? innerRadius = null,
-        bool? noInsideCorner = null, string? material = null, string? spindle = null, int offset = 0, int size = 20) =>
+        bool? noInsideCorner = null, string? material = null, string? spindle = null, int offset = 0, int size = 20,
+        double? pilotDiameter = null, double? pilotDepth = null, double? includedAngle = null, double? pitch = null, string? hand = null, string? tolerance = null) =>
         Replies.WithToken(tokens, async token => (await api.FindOperationTools(new(operation, diameter, width, depth,
-            bottom, breakthrough, innerRadius, noInsideCorner, material, spindle, offset, size), token)).ToJsonString());
+            bottom, breakthrough, innerRadius, noInsideCorner, material, spindle, offset, size,
+            pilotDiameter, pilotDepth, includedAngle, pitch, hand, tolerance), token)).ToJsonString());
 
     [McpServerTool(Name = "find_operation_mills", ReadOnly = true), Description(
         "Find square end mills for slot or shoulder milling by available cutter width, axial depth and optional inside corner radius (mm). " +

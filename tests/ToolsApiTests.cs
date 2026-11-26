@@ -24,6 +24,20 @@ public class ToolsApiTests
 
     /** The agent's words become the API's: section, for, pullable - and a filter not given is not sent at all. */
     [Fact]
+    public async Task FinishingSearchPassesThePilotHoleAndThreadGeometry()
+    {
+        var stub = new StubHandler().OnJson("GET", "/api/operation-tools", "{}");
+        var tapping = new OperationBrief("tapping", 6, null, 12, "blind", null, null, null, "steel", null, 0, 10,
+            PilotDiameter: 5, PilotDepth: 16, Pitch: 1, Hand: "right");
+        await StubHandler.Api(stub).FindOperationTools(tapping, "token");
+        string url = stub.Requests.Single().Uri.OriginalString;
+        foreach (var field in new[] { "operation=tapping", "pilotDiameter=5", "pilotDepth=16", "pitch=1", "hand=right" })
+            Assert.Contains(field, url);
+        Assert.DoesNotContain("includedAngle=", url);
+        Assert.DoesNotContain("tolerance=", url);
+    }
+
+    [Fact]
     public async Task SearchSendsOnlyTheFiltersGivenUnderTheApisNames()
     {
         var stub = new StubHandler().OnJson("GET", "/api/components", """{"total":0,"page":0,"size":50,"items":[]}""");

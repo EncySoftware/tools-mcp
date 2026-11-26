@@ -282,6 +282,8 @@ public class ToolsApi : IToolsApi
     public Task<JsonObject> FindOperationTools(OperationBrief b, string token) => Get<JsonObject>("/operation-tools" + Params(
         ("operation", b.Operation), ("diameter", b.Diameter), ("width", b.Width), ("depth", b.Depth), ("bottom", b.Bottom),
         ("breakthrough", b.Breakthrough), ("innerRadius", b.InnerRadius), ("noInsideCorner", b.NoInsideCorner),
+        ("pilotDiameter", b.PilotDiameter), ("pilotDepth", b.PilotDepth), ("includedAngle", b.IncludedAngle),
+        ("pitch", b.Pitch), ("hand", b.Hand), ("tolerance", b.Tolerance),
         ("material", b.Material), ("spindle", b.Spindle), ("page", b.Offset), ("cursor", b.Offset), ("size", b.Size)), token);
 
     public Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm,

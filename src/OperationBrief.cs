@@ -3,7 +3,9 @@ using System.Text.Json.Nodes;
 namespace ToolsMcp;
 
 public sealed record OperationBrief(string? Operation, double? Diameter, double? Width, double? Depth, string? Bottom,
-    double? Breakthrough, double? InnerRadius, bool? NoInsideCorner, string? Material, string? Spindle, int Offset, int Size)
+    double? Breakthrough, double? InnerRadius, bool? NoInsideCorner, string? Material, string? Spindle, int Offset, int Size,
+    double? PilotDiameter = null, double? PilotDepth = null, double? IncludedAngle = null, double? Pitch = null,
+    string? Hand = null, string? Tolerance = null)
 {
     internal static OperationBrief FromContext(JsonObject context, string? mode, double? width, double? depth,
         double breakthrough, double? radius, bool? noInsideCorner, string material, string? spindle, int offset, int size)
