@@ -10,11 +10,12 @@ public partial class SearchTools(IToolsApi api, TokenProvider tokens)
 {
     [McpServerTool(Name = "find_tools_for_operation", ReadOnly = true), Description(
         "Plan tool selection before creating an ENCY operation. Send known geometry in mm and ask only the questions in missing. " +
-        "operation: drilling, milling, slot, shoulder, countersinking, tapping, reaming, turning or grooving. For drilling use diameter and bottom tip/cylinder/through. " +
+        "operation: drilling, milling, slot, shoulder, countersinking, tapping, reaming, turning, grooving or parting. For drilling use diameter and bottom tip/cylinder/through. " +
         "Countersinking uses outside diameter, pilotDiameter and full includedAngle in degrees. For metric tapping use pitch (mm) and hand right/left. " +
         "For reaming use finished diameter and tolerance (e.g. H7). Tapping and reaming use depth, pilotDiameter, bottom through/blind and pilotDepth for blind holes. "  +
         "For slot/shoulder use width and innerRadius or confirm noInsideCorner. Drilling and milling can match saved assemblies. " +
         "For turning/grooving give side (external/internal; grooves also face), hand, and depth. Grooves need width. " +
+        "For parting give hand and the bar or tube outside diameter; a bar is cut to its axis, a tube through the wall given as depth; width is optional. " +
         "Internal and face operations need diameter. Optional axialReach, holderInterface and insertId constrain access and tooling. " +
         "For pocket use width, depth, bottomRadius and innerRadius or noInsideCorner. For surface3d specify width, depth, surfaceRadius and toolShape ball/torus. " +
         "Optional passDepth separates axial engagement from overall depth. For internal ISO metric threadmilling use nominal diameter, pitch, pilotDiameter, depth, blind/through and pilotDepth if blind. " +
