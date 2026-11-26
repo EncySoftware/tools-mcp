@@ -9,7 +9,7 @@ namespace ToolsMcp;
 
 [McpServerToolType]
 [SupportedOSPlatform("windows")]
-public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
+public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
 {
     [McpServerTool(Name = "list_project_tools", ReadOnly = true), Description(
         "Reads installed tools from the current ENCY machine magazines. Returns the ENCY process id, project path, magazine, actual T position and component caption. If several ENCY processes are open, choose a processId.")]

@@ -9,7 +9,7 @@ internal sealed record HoleReading(
     [property: JsonPropertyName("unresolved"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Unresolved = false);
 
 internal sealed record AuditCutter(string Id, string Name, string Type, double? DiameterMm, double? ReachMm,
-    double? PointAngleDegrees, string Magazine, int Position, string Source, IReadOnlyList<string>? Adapters = null, string? PointAngleState = null);
+    double? PointAngleDegrees, string Magazine, int Position, string Source, IReadOnlyList<string>? Adapters = null, string? PointAngleState = null, string? Identity = null);
 
 internal sealed record HoleGroup(double? DiameterMm, double? DepthMm, string? Bottom, bool Unresolved, int Count);
 internal sealed record AuditReason(string Code, double? ActualMm = null, double? RequiredMm = null);

@@ -90,7 +90,7 @@ internal static partial class EncyIpc
         }
     }
 
-    private static int AuditProject(Handle project, AssemblyLoadContext runtime, string path, int pid, string units)
+    private static int AuditProject(Handle project, AssemblyLoadContext runtime, string path, int pid, string units, bool forPlanning = false)
     {
         if (units is not ("metric" or "imperial")) throw new ArgumentException("Specify metric or imperial.");
         double scale = units == "metric" ? 1 : 25.4;
@@ -118,13 +118,13 @@ internal static partial class EncyIpc
 
         var drillingDiameters = operations.Where(s => s.Holes != null).SelectMany(s => s.Holes!)
             .Where(h => h.Bottom is "through" or "cylinder" && h.DiameterMm.HasValue).Select(h => h.DiameterMm!.Value).Distinct().ToArray();
-        bool NeedsDrillAngle(double d) => drillingDiameters.Any(required => Math.Abs(d-required) <= 1e-7);
+        bool NeedsDrillAngle(double d) => forPlanning || drillingDiameters.Any(required => Math.Abs(d-required) <= 1e-7);
         var inventory = Inventory(project,scale,NeedsDrillAngle,includeIncomplete:true);
         AuditCutter Describe(Installed t) => new(t.ID,t.Caption,t.Type,PositiveMm(t.DiameterMm),
             PositiveMm(t.ReachMm),InstalledDrillPoint.ValidAngle(t.Angle) ? t.Angle : null,
             t.Magazine,t.Position,t.Node ? "machineMagazine" : "projectToolList",t.Adapters,
             !InstalledDrillPoint.IsStandardDrill(t.Type) ? null : InstalledDrillPoint.ValidAngle(t.Angle) ? "known" :
-                t.Node && !NeedsDrillAngle(t.DiameterMm) ? "notRead" : "unavailable");
+                t.Node && !NeedsDrillAngle(t.DiameterMm) ? "notRead" : "unavailable", t.Identity);
         var rows = new List<ProjectAuditRow>();
         foreach (var s in operations) {
             // Node IDs and legacy tool IDs occupy different namespaces; never match by T position.

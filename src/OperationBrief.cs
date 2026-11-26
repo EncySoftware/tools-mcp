@@ -2,10 +2,12 @@ using System.Text.Json.Nodes;
 
 namespace ToolsMcp;
 
-public sealed record OperationBrief(string? Operation, double? Diameter, double? Width, double? Depth, string? Bottom,
-    double? Breakthrough, double? InnerRadius, bool? NoInsideCorner, string? Material, string? Spindle, int Offset, int Size,
+public sealed record OperationBrief(string? Operation = null, double? Diameter = null, double? Width = null,
+    double? Depth = null, string? Bottom = null, double? Breakthrough = null, double? InnerRadius = null,
+    bool? NoInsideCorner = null, string? Material = null, string? Spindle = null, int Offset = 0, int Size = 20,
     double? PilotDiameter = null, double? PilotDepth = null, double? IncludedAngle = null, double? Pitch = null,
-    string? Hand = null, string? Tolerance = null)
+    string? Hand = null, string? Tolerance = null, string? Side = null, string? HolderInterface = null,
+    string? InsertId = null, double? AxialReach = null)
 {
     internal static OperationBrief FromContext(JsonObject context, string? mode, double? width, double? depth,
         double breakthrough, double? radius, bool? noInsideCorner, string material, string? spindle, int offset, int size)

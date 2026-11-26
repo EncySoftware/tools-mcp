@@ -283,7 +283,8 @@ public class ToolsApi : IToolsApi
         ("operation", b.Operation), ("diameter", b.Diameter), ("width", b.Width), ("depth", b.Depth), ("bottom", b.Bottom),
         ("breakthrough", b.Breakthrough), ("innerRadius", b.InnerRadius), ("noInsideCorner", b.NoInsideCorner),
         ("pilotDiameter", b.PilotDiameter), ("pilotDepth", b.PilotDepth), ("includedAngle", b.IncludedAngle),
-        ("pitch", b.Pitch), ("hand", b.Hand), ("tolerance", b.Tolerance),
+        ("pitch", b.Pitch), ("hand", b.Hand), ("tolerance", b.Tolerance), ("side", b.Side),
+        ("holderInterface", b.HolderInterface), ("insertId", b.InsertId), ("axialReach", b.AxialReach),
         ("material", b.Material), ("spindle", b.Spindle), ("page", b.Offset), ("cursor", b.Offset), ("size", b.Size)), token);
 
     public Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm,

@@ -144,7 +144,8 @@ public class ServeTests : IAsyncLifetime
         var list = await Answer(await http.SendAsync(Rpc("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""", anna)));
         var names = list.GetProperty("result").GetProperty("tools").EnumerateArray()
             .Select(t => t.GetProperty("name").GetString()).ToList();
-        Assert.Equal(32, names.Count);
+        Assert.Equal(33, names.Count);
+        Assert.Contains("plan_tools_for_operations", names);
         Assert.Contains("find_tools_for_operation", names);
         Assert.Contains("find_operation_mills", names);
         Assert.Contains("find_operation_drills", names);
