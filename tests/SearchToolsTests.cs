@@ -6,6 +6,15 @@ public class SearchToolsTests
 {
     private readonly FakeToolsApi _api = new();
 
+    [Fact]
+    public async Task OperationDrillsUseTheCallersTokenAndRejectInvalidBreakthrough()
+    {
+        Assert.Equal("{}", await Tools().FindOperationDrills(10, 40, "through", 1, "P"));
+        Assert.Contains((nameof(FakeToolsApi.FindDrills), "t1"), _api.Calls);
+        Assert.Contains("ERROR", await Tools().FindOperationDrills(10, 40, "cylinder", 1));
+        Assert.Contains("ERROR", await Tools().FindOperationDrills(double.NaN, 40));
+    }
+
     private SearchTools Tools() => new(_api, new FakeTokens());
 
     private static Component Mill(string id) => new(id, "TE90AP 120-W20-17", "End mill", "MIL", 20, 120,

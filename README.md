@@ -45,6 +45,9 @@ Version 0.7.3 applies an article cutting condition to an operation in the open E
 | `export_assembly` | Downloads one saved assembly as an ENCY `.sc12tool` file. |
 | `update_assembly` | Changes the name, T number, place, spindle or measured gauge length of a saved assembly. |
 | `find_adapter_chain` | Finds a direct fit or a shortest chain of catalogued adapters between two component IDs, in either order. Resolve part numbers with `find_components` first. |
+| `find_operation_drills` | Search by hole diameter and depth in mm. Returns compatible working lengths, matching personal assemblies first, and permitted supplier data for the requested material. Choose tip, full-diameter blind, or through depth with breakout. |
+| `get_drilling_operation` (local Windows) | Read the selected ENCY drilling cycle, hole dimensions and workpiece material when set. Supply the project's displayed units. |
+| `assign_operation_drill` (local Windows) | After confirming the target operation and drill, assign the selected component or saved assembly in the open project. Pass its IDs from the search and operation readout. |
 | `get_cutting_data` | Reads the manufacturer's cutting table for a component, optionally filtered by material group or material number. |
 
 Every reply that leaves something in a library ends with how to open it in ENCY: the Tools catalogue extension

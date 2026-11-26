@@ -4,6 +4,11 @@ using ToolsMcp;
 /** tools.encycam.com in memory: results set per method, a failure per method, and every call with the token it carried. */
 internal sealed class FakeToolsApi : IToolsApi
 {
+    public Task<System.Text.Json.Nodes.JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm, string material, int page, int size, string token)
+    { Saw(nameof(FindDrills), token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
+    public Task<DownloadedFile> ExportDrill(string componentId, string? libraryId, string? assemblyId, string token)
+        => throw new NotSupportedException();
+
     public string Site => "https://tools.test";
 
     public ConcurrentQueue<(string Method, string Token)> Calls { get; } = new();

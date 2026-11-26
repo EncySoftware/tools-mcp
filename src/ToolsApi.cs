@@ -79,6 +79,8 @@ public record ComponentQuery(string? Query = null, string? Kit = null, string? C
 /// <summary>Every route of tools.encycam.com, called as the person signed in.</summary>
 public interface IToolsApi
 {
+    Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm, string material, int page, int size, string token);
+    Task<DownloadedFile> ExportDrill(string componentId, string? libraryId, string? assemblyId, string token);
     string Site { get; }
     Task<Account> GetMe(string token);
     Task<IReadOnlyList<KitSummary>> ListKits(string? query, string? discipline, int? encyVersion, string token);
@@ -273,6 +275,15 @@ public class ToolsApi : IToolsApi
 
     public Task<Library> UpdateAssembly(string library, string assembly, AssemblyPatch patch, string token) =>
         Send<Library>(HttpMethod.Put, $"/me/libraries/{Esc(library)}/assemblies/{Esc(assembly)}", token, patch);
+
+    public Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm,
+        string material, int page, int size, string token) => Get<JsonObject>("/drills" + Params(
+            ("diameter", diameterMm), ("depth", depthMm), ("bottom", bottom), ("breakthrough", breakthroughMm),
+            ("material", material), ("page", page), ("size", size)), token);
+
+    public async Task<DownloadedFile> ExportDrill(string componentId, string? libraryId, string? assemblyId, string token) =>
+        await FileOf(await SendForFile(HttpMethod.Get, $"/drills/{Esc(componentId)}/tool.sc12tool"
+            + Params(("library", libraryId), ("assembly", assemblyId)), token), "Drill.sc12tool");
 
     public async Task<DownloadedFile> ExportAssembly(string library, string assembly, string token) =>
         await FileOf(await SendForFile(HttpMethod.Get, $"/me/libraries/{Esc(library)}/assemblies/{Esc(assembly)}/tool.sc12tool", token), "Tool.sc12tool");

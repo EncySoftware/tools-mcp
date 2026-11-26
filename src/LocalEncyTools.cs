@@ -58,6 +58,32 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             return $"{result}\n{shelf.Summary} GTC: {file}";
         });
 
+    [McpServerTool(Name = "get_drilling_operation", ReadOnly = true), Description(
+        "Read the selected drilling operation, its hole dimensions, material if specified, operation id and project path. " +
+        "Supply metric or imperial according to the project's displayed units. Dimensions returned are mm. " +
+        "Unresolved levels and blind/through classification require user input before sizing.")]
+    public Task<string> GetDrillingOperation(string operationUnits, int? processId = null) =>
+        operationUnits is "metric" or "imperial" ? Run("drill-context", processId, [operationUnits])
+            : Task.FromResult("ERROR: specify metric or imperial.");
+
+    [McpServerTool(Name = "assign_operation_drill"), Description(
+        "Import one selected drill or saved warehouse assembly and assign it to the selected ENCY drilling operation. " +
+        "Confirm the change with the user first. Use the processId, projectPath and operationId from get_drilling_operation " +
+        "and the componentId, optional libraryId and assemblyId from find_operation_drills. Does not save the project.")]
+    public Task<string> AssignOperationDrill(int processId, string projectPath, string operationId, string componentId,
+        string? libraryId = null, string? assemblyId = null) =>
+        Replies.WithToken(tokens, async token =>
+        {
+            if (Ids.Of(componentId) is not { } cid) return Ids.NotAComponent(componentId);
+            if (string.IsNullOrWhiteSpace(projectPath) || !Guid.TryParse(operationId, out _)
+                || (libraryId == null) != (assemblyId == null)
+                || (libraryId != null && (!Guid.TryParse(libraryId,out _) || !Guid.TryParse(assemblyId,out _))))
+                return "ERROR: specify the selected project and operation, and both warehouse IDs or neither.";
+            var file = await api.ExportDrill(cid, libraryId, assemblyId, token);
+            var path = DrillFileCache.Store(file.Bytes);
+            return await Run("drill-assign", processId, [projectPath, operationId, path]);
+        });
+
     private static async Task<string> Run(string operation, int? pid, string[] arguments)
     {
         try

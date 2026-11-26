@@ -28,7 +28,7 @@ internal static class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -61,6 +61,60 @@ internal static class EncyIpc
             var app = helper.Object("GetRunningCamApp", pid);
             var project = app.Object("GetActiveProject");
             var path = project.Text("GetFilePath");
+            if (args[0] is "drill-context" or "drill-assign")
+            {
+                var tech = project.Object("GetTechnologist");
+                var op = tech.Object("get_CurrentOperation");
+                var id = op.Text("GetId");
+                var xml = op.Object("get_XMLProp");
+                if (xml.Count("get_PropExists", "DrillingType") == 0 || xml.Count("GetInteger","DrillingType") is < 0 or > 3)
+                    throw new InvalidOperationException("Select a drilling operation first.");
+                if (args[0] == "drill-assign")
+                {
+                    if (string.IsNullOrWhiteSpace(path) || !string.Equals(path,args[2],StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(id,args[3],StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("The selected project or operation changed.");
+                    var fileName = Path.GetFullPath(args[4]);
+                    if (!File.Exists(fileName) || !Path.GetExtension(fileName).Equals(".sc12tool",StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Missing tool exchange file.");
+                    var listType = app.Type.GetMethod("ImportToolsFromFile")?.GetParameters()[0].ParameterType
+                        ?? throw new NotSupportedException("Update ENCY to assign a tool from a file.");
+                    var files = DispatchProxy.Create(listType, typeof(ToolFileList));
+                    ((ToolFileList)files).FileName = fileName;
+                    var imported = app.Strings("ImportToolsFromFile",files,id);
+                    if (imported.Count != 1 || string.IsNullOrWhiteSpace(imported[0])) throw new InvalidOperationException("ENCY did not report a single assigned tool.");
+                    var assigned = op.Object("get_XMLProp").Object("GetArray", "ToolSection.Tools").Object("get_Itm", 0);
+                    if (!string.Equals(assigned.Text("GetCalculatedString", "ToolID"), imported[0], StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException($"Tool {imported[0]} was imported, but ENCY did not confirm the assignment to {id}.");
+                    Console.WriteLine($"Assigned project tool {imported[0]} to {op.Text("GetName")} [{id}].");
+                    return 0;
+                }
+                if (args[2] is not ("metric" or "imperial")) throw new ArgumentException("Specify metric or imperial.");
+                var scale = args[2] == "imperial" ? 25.4 : 1;
+                var job=op.Object("get_ModelFormerJobAssignment");
+                var holeType=assemblies.LoadFromAssemblyName(new AssemblyName("CAMIPC.ModelFormerTypes")).GetType("CAMIPC.ModelFormerTypes.ICamIpcHoleModelItem", true)!;
+                var holes=new List<object>();
+                for (int i=0,count=job.Count("get_Count"); i<count; i++)
+                {
+                    var item=job.Object("get_Item",i);
+                    if (!holeType.IsInstanceOfType(item.Value)) { holes.Add(new { unresolved = true }); continue; }
+                    var hole=new Handle(item.Value,holeType);
+                    var diameter=Convert.ToDouble(hole.Call("get_Diameter",[]).Value)*scale;
+                    var depth=(Convert.ToDouble(hole.Call("get_TopLevel",[]).Value)-Convert.ToDouble(hole.Call("get_BottomLevel",[]).Value))*scale;
+                    bool resolved=hole.Call("get_TopLevelMode",[]).Value?.ToString()!="htlmDefault" &&
+                        hole.Call("get_BottomLevelMode",[]).Value?.ToString()!="hblmDefault";
+                    holes.Add(new {diameterMm=double.IsFinite(diameter)&&diameter>0?(double?)diameter:null,
+                        depthMm=resolved && double.IsFinite(depth)&&depth>0?(double?)depth:null});
+                }
+                const string mat="ConditionsSection.Workpiece.Material";
+                var material = xml.Count("get_PropExists",mat)==0 ? null : xml.Text("GetString",mat);
+                var activeTools = xml.Object("GetArray", "ToolSection.Tools");
+                string? toolId = activeTools.Count("get_TopItem") < 0 ? null :
+                    activeTools.Object("get_Itm", 0).Text("GetCalculatedString", "ToolID");
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new {processId=pid,projectPath=path,operationId=id,toolId,
+                    operationName=op.Text("GetName"),operationUnits=args[2],material,holes}));
+                return 0;
+            }
             if (args[0] == "cutting")
             {
                 if (string.IsNullOrWhiteSpace(path) || !string.Equals(path, args[2], StringComparison.OrdinalIgnoreCase)
@@ -168,6 +222,21 @@ internal static class EncyIpc
         var slot = $"{node.Text("GetMagazineName")} T#{node.Count("GetPosition")}";
         var adapters = node.Strings("GetAdapters");
         return slot + " — " + string.Join(" → ", new[] { caption }.Concat(adapters));
+    }
+
+    // Implement this installation's IListString directly. The ENCY 3.4 .NET helper targets
+    // .NET 10 whereas a local MCP can run on .NET 8. IPC only reads this single file list.
+    public class ToolFileList : DispatchProxy
+    {
+        public string FileName { get; set; } = "";
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => targetMethod?.Name switch
+        {
+            "Count" => 1,
+            "Get" when args is [0] => FileName,
+            "GetText" => FileName,
+            "Contains" when args is [string value] => FileName == value,
+            _ => throw new NotSupportedException(targetMethod?.Name)
+        };
     }
 
     private sealed record Handle(object? Value, Type Type)
