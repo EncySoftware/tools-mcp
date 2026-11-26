@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using ModelContextProtocol.Server;
 
@@ -18,38 +17,30 @@ public sealed class LiveProjectChangeTools
         "A matching preview and confirmation in the ENCY desktop session are required. " +
         "Reports each assignment. Changes are in memory and stop at the first failure.")]
     public Task<string> ApplyProjectToolChanges(int processId, string projectPath, string operationUnits,
-        ProjectToolChange[] changes, string previewId, bool confirmed=false)
+        ProjectToolChange[] changes, string previewId, bool confirmed=false, CancellationToken cancellationToken=default)
     {
         if (!Enabled) return Task.FromResult("ERROR: live batch tool changes are disabled.");
         if (!confirmed) return Task.FromResult("ERROR: review the plan before requesting desktop approval.");
-        return LocalEncyTools.ReviewChanges(processId,"apply",new(projectPath,operationUnits,changes,previewId,true));
+        return LocalEncyTools.ReviewChanges(processId,"apply",new(projectPath,operationUnits,changes,previewId,true),cancellationToken);
     }
 
-    [DllImport("user32.dll", EntryPoint="MessageBoxW", CharSet=CharSet.Unicode, ExactSpelling=true)]
-    private static extern int MessageBox(IntPtr owner, string text, string title, uint flags);
-
-    internal static bool ConfirmOnDesktop(int pid, string projectPath, IReadOnlyList<ToolChangeRow> rows)
+    internal static bool ConfirmOnDesktop(int pid, string projectPath, IReadOnlyList<ToolChangeRow> rows, Func<bool> disconnected)
     {
         if (!Environment.UserInteractive) return false;
         using var current = Process.GetCurrentProcess();
         using var ency = Process.GetProcessById(pid);
-        var owner = ency.MainWindowHandle;
-        if (current.SessionId != ency.SessionId || owner == IntPtr.Zero) return false;
-
-        // Collect all answers before the first setter. Cancel, timeout or a closed window leaves the plan unapplied.
-        for (int i = 0; i < rows.Count; i++)
+        if (current.SessionId != ency.SessionId || ency.MainWindowHandle == IntPtr.Zero) return false;
+        var summary = new System.Text.StringBuilder();
+        summary.AppendLine($"Проект: {projectPath}").AppendLine();
+        foreach (var row in rows)
         {
-            var row = rows[i];
-            string action = i + 1 == rows.Count ? "Применить согласованный план в открытом проекте?" :
-                "Согласовать этот пункт и перейти к следующему?";
-            string message = $"Проект: {projectPath}\n\nОперация: {row.OperationName} ({row.Change.OperationId})" +
-                $"\nСейчас: {Label(row.Before)}\nЗаменить на: {Label(row.After)}\n\n" +
-                "Запись начнётся после согласования всех пунктов. При ошибке уже выполненные замены останутся в памяти проекта.\n\n" + action;
-            const uint yesNoDefaultNo = 0x4 | 0x100 | 0x30;
-            if (MessageBox(owner,message,$"ENCY · Замена инструмента {i + 1} из {rows.Count}",yesNoDefaultNo) != 6)
-                return false;
+            summary.AppendLine($"{row.OperationName} ({row.Change.OperationId})")
+                .AppendLine($"Сейчас: {Label(row.Before)}")
+                .AppendLine($"Заменить на: {Label(row.After)}").AppendLine();
         }
-        return true;
+        summary.AppendLine("При ошибке уже выполненные замены останутся в памяти проекта.")
+            .Append($"Время для подтверждения — {LiveBatchWorker.OperatorLimit.TotalMinutes:0} минут.");
+        return BatchApprovalDialog.Show(summary.ToString(), rows.Count, disconnected);
     }
 
     private static string Label(ToolBinding? binding) => binding == null ? "—" :

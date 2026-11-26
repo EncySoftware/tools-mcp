@@ -28,7 +28,7 @@ public sealed partial class LocalEncyTools
             Task.FromResult("ERROR: specify the project path, metric or imperial units and valid operation IDs.");
     }
 
-    internal static Task<string> ReviewChanges(int pid,string command,ToolPlanRequest request) =>
+    internal static Task<string> ReviewChanges(int pid,string command,ToolPlanRequest request,CancellationToken cancellationToken=default) =>
         ProjectToolChangePlan.Validate(request) is { } problem ? Task.FromResult("ERROR: "+problem) :
-            Run("tool-plan",pid,[command],JsonSerializer.Serialize(request,AuditOutput.Json));
+            Run("tool-plan",pid,[command],JsonSerializer.Serialize(request,AuditOutput.Json),cancellationToken);
 }

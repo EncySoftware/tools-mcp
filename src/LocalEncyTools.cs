@@ -179,7 +179,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             return await Run(mill ? "mill-assign" : "drill-assign", processId, [projectPath, operationId, path]);
         });
 
-    private static async Task<string> Run(string operation, int? pid, string[] arguments, string? input = null)
+    private static async Task<string> Run(string operation, int? pid, string[] arguments, string? input = null,CancellationToken cancellationToken=default)
     {
         try
         {
@@ -205,6 +205,8 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             start.ArgumentList.Add(operation);
             start.ArgumentList.Add(pid.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
             foreach (var value in arguments) start.ArgumentList.Add(value);
+            if (operation=="tool-plan" && arguments[0]=="apply" && input!=null)
+                return await LiveBatchWorker.Run(start,input,cancellationToken);
             using var worker = Process.Start(start) ?? throw new InvalidOperationException("Could not start ENCY IPC.");
             var stdout = worker.StandardOutput.ReadToEndAsync();
             var stderr = worker.StandardError.ReadToEndAsync();
@@ -220,16 +222,12 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             catch (OperationCanceledException)
             {
                 if (!worker.HasExited) worker.Kill(entireProcessTree: operation == "assembly-simulation");
-                if (operation=="tool-plan" && arguments[0]=="apply" && input!=null)
-                    return ProjectToolChangePlan.Interrupted(System.Text.Json.JsonSerializer.Deserialize<ToolPlanRequest>(input,AuditOutput.Json)!,await stderr);
                 return "ERROR: ENCY did not reply in time. Check the magazine before repeating an import.";
             }
             await write;
             var reply = (await stdout).Trim();
             var detail = (await stderr).Trim();
             if (worker.ExitCode == 0) return reply;
-            if (operation=="tool-plan" && arguments[0]=="apply" && input!=null && detail.Contains(ProjectToolChangePlan.CheckpointPrefix,StringComparison.Ordinal))
-                return ProjectToolChangePlan.Interrupted(System.Text.Json.JsonSerializer.Deserialize<ToolPlanRequest>(input,AuditOutput.Json)!,detail);
             return "ERROR: " + (detail.Length > 0 ? detail : $"ENCY IPC stopped ({worker.ExitCode}). Check the project before retrying.");
         }
         catch (Exception e) { return "ERROR: " + e.Message; }

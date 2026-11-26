@@ -43,6 +43,9 @@ internal static class ProjectToolChangePlan
 
     internal const string CheckpointPrefix = "MCP_TOOL_OUTCOME ";
 
+    internal static List<ChangeOutcome> NotApplied(ToolPlanRequest request) =>
+        request.Changes.Select(c => new ChangeOutcome(c.OperationId,"notApplied")).ToList();
+
     internal static string Interrupted(ToolPlanRequest request,string stderr)
     {
         var states=new Dictionary<string,ChangeOutcome>();
@@ -53,9 +56,9 @@ internal static class ProjectToolChangePlan
                 if (item!=null) states[item.OperationId]=item.Status=="starting"? item with {Status="stateUnknown"}:item;
             } catch(JsonException) { /* The worker may stop partway through its last checkpoint. */ }
         }
-        var outcomes=request.Changes.Select(c=>states.GetValueOrDefault(c.OperationId) ?? new(c.OperationId,"notConfirmed"));
-        return JsonSerializer.Serialize(new{status="interrupted",outcomes,
-            detail="Re-read the project and preview remaining changes before retrying."},AuditOutput.Json);
+        var outcomes=request.Changes.Select(c=>states.GetValueOrDefault(c.OperationId) ?? new(c.OperationId,"notApplied"));
+        return JsonSerializer.Serialize(new{status=states.Count == 0 ? "notApplied" : "interrupted",outcomes,
+            detail=states.Count == 0 ? "No tool assignment started." : "Re-read the project and preview remaining changes before retrying."},AuditOutput.Json);
     }
 
     internal static string Digest<T>(T value) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value, AuditOutput.Json)));
@@ -72,7 +75,7 @@ internal static class ProjectToolChangePlan
         if (!request.Confirmed || string.IsNullOrWhiteSpace(request.PreviewId)) return ("confirmationRequired", []);
         if (rows.Any(r=>r.Problem!=null) || Fingerprint(pid,request,rows) != request.PreviewId) return ("stalePreview", []);
         if (approve != null && !approve())
-            return ("notApproved", rows.Select(row => new ChangeOutcome(row.Change.OperationId, "skipped")).ToList());
+            return ("notApplied", NotApplied(request));
         var results = new List<ChangeOutcome>();
         void Record(ChangeOutcome outcome) { results.Add(outcome); checkpoint?.Invoke(outcome); }
         bool stop = false, changed = false;

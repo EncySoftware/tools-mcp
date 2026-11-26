@@ -35,9 +35,9 @@ public class ProjectToolChangePlanTests
         var a=Row(Change()); var b=Row(Change());
         var result=ProjectToolChangePlan.Apply(Confirm(Request(a,b),a,b),1,[a,b],
             _=>throw new Exception("unexpected reread"),_=>throw new Exception("unexpected setter"),approve:()=>false);
-        Assert.Equal("notApproved",result.Status);
+        Assert.Equal("notApplied",result.Status);
         Assert.Equal(2,result.Outcomes.Count);
-        Assert.All(result.Outcomes,o=>Assert.Equal("skipped",o.Status));
+        Assert.All(result.Outcomes,o=>Assert.Equal("notApplied",o.Status));
     }
 
     [Fact] public void ReportsPartialApplicationAndSkipsRemainingOnError() {
@@ -77,7 +77,8 @@ public class ProjectToolChangePlanTests
             System.Text.Json.JsonSerializer.Serialize(new ChangeOutcome(rows[i].Change.OperationId,status),AuditOutput.Json);
         var result=System.Text.Json.Nodes.JsonNode.Parse(ProjectToolChangePlan.Interrupted(Request(rows),
             string.Join("\n",Line(0,"applied"),Line(1,"starting"),"native error")))!;
-        Assert.Equal(new[]{"applied","stateUnknown","notConfirmed"},result["outcomes"]!.AsArray().Select(n=>(string?)n!["status"]));
+        Assert.Equal("interrupted",(string?)result["status"]);
+        Assert.Equal(new[]{"applied","stateUnknown","notApplied"},result["outcomes"]!.AsArray().Select(n=>(string?)n!["status"]));
     }
 
     [Fact] public void SimulationReplayRequiresTheCompletePreviewPair() {

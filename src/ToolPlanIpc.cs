@@ -52,15 +52,31 @@ internal static partial class EncyIpc
         if (command is not ("preview" or "apply")) throw new ArgumentException("Unknown plan action.");
         if (command == "apply" && !LiveProjectChangeTools.Enabled)
             throw new InvalidOperationException("Live batch tool changes are disabled.");
-        var request=JsonSerializer.Deserialize<ToolPlanRequest>(Console.In.ReadToEnd(),AuditOutput.Json)
+        string input = command == "apply" ? Console.In.ReadLine() ?? "" : Console.In.ReadToEnd();
+        var request=JsonSerializer.Deserialize<ToolPlanRequest>(input,AuditOutput.Json)
             ?? throw new ArgumentException("Missing plan.");
-        var report=RunToolPlan(app,project,runtime,pid,path,command,request);
+        var report=RunToolPlan(app,project,runtime,pid,path,"preview",request);
+        if (command == "apply")
+        {
+            if (!request.Confirmed || report.Status != "ready" || report.PreviewId != request.PreviewId)
+                report=report with {Status=request.Confirmed ? "stalePreview" : "confirmationRequired",
+                    Outcomes=ProjectToolChangePlan.NotApplied(request)};
+            else
+            {
+                // This preview has released its ENCY mutex. No owner HWND, setter or write lock exists during the wait.
+                bool accepted = LiveBatchWorker.RequestConsent(Console.In,Console.Error,
+                    disconnected => LiveProjectChangeTools.ConfirmOnDesktop(pid,path,report.Rows,disconnected));
+                report = accepted
+                    ? RunToolPlan(app,project,runtime,pid,path,"apply",request,approvedPreview:report.PreviewId)
+                    : report with {Status="notApplied", Outcomes=ProjectToolChangePlan.NotApplied(request)};
+            }
+        }
         Console.WriteLine(JsonSerializer.Serialize(report,AuditOutput.Json));
         return 0;
     }
 
     private static NativePlanReport RunToolPlan(Handle app,Handle project,AssemblyLoadContext runtime,int pid,string path,
-        string command,ToolPlanRequest request,bool isolatedCopy=false)
+        string command,ToolPlanRequest request,bool isolatedCopy=false,string? approvedPreview=null)
     {
         if (ProjectToolChangePlan.Validate(request) is string invalid) throw new ArgumentException(invalid);
         using var guard = new Mutex(false, "EncySoftware.ToolsMcp.ToolPlan."+pid);
@@ -112,8 +128,9 @@ internal static partial class EncyIpc
                         var op=Operation(row.Change.OperationId);
                         SetInstalled(project,runtime,op,row.Change.OperationId,after.Id,after.Source=="machineMagazine");
                     }, isolatedCopy?null:o=>Console.Error.WriteLine(ProjectToolChangePlan.CheckpointPrefix+JsonSerializer.Serialize(o,AuditOutput.Json)),
-                    approve: isolatedCopy ? null : () => LiveProjectChangeTools.Enabled && LiveProjectChangeTools.ConfirmOnDesktop(pid, path, rows));
-                return new(result.Status,pid,path,request.PreviewId,rows,result.Outcomes);
+                    approve: isolatedCopy ? null : () => LiveProjectChangeTools.Enabled && approvedPreview != null && approvedPreview == request.PreviewId);
+                return new(result.Status,pid,path,request.PreviewId,rows,
+                    result.Outcomes.Count == 0 ? ProjectToolChangePlan.NotApplied(request) : result.Outcomes);
             }
         } finally { if (acquired) guard.ReleaseMutex(); }
 
