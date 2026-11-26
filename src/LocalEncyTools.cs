@@ -61,10 +61,43 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     [McpServerTool(Name = "get_drilling_operation", ReadOnly = true), Description(
         "Read the selected drilling operation, its hole dimensions, material if specified, operation id and project path. " +
         "Supply metric or imperial according to the project's displayed units. Dimensions returned are mm. " +
-        "Unresolved levels and blind/through classification require user input before sizing.")]
+        "Blind/through classification is read from features linked to the assigned faces. Unresolved dimensions or depth references require user input.")]
     public Task<string> GetDrillingOperation(string operationUnits, int? processId = null) =>
         operationUnits is "metric" or "imperial" ? Run("drill-context", processId, [operationUnits])
             : Task.FromResult("ERROR: specify metric or imperial.");
+
+    [McpServerTool(Name="get_milling_operation", ReadOnly=true), Description("Read the selected ENCY milling operation and recognized pocket/side height and inside radius. Supply available slot or shoulder width when not specified by geometry.")]
+    public Task<string> GetMillingOperation(string operationUnits,int? processId=null) =>
+        Run("mill-context",processId,[operationUnits]);
+
+    private static string[] GeometryArgs(string units,string mode,double width,double depth,double extra,double? radius) =>
+        [units,mode,width.ToString("R",System.Globalization.CultureInfo.InvariantCulture),depth.ToString("R",System.Globalization.CultureInfo.InvariantCulture),
+         extra.ToString("R",System.Globalization.CultureInfo.InvariantCulture),radius?.ToString("R",System.Globalization.CultureInfo.InvariantCulture)??""];
+
+    [McpServerTool(Name="find_tools_for_selected_operation", ReadOnly=true), Description(
+        "Search the selected project's installed magazine/tools first, then matching warehouse assemblies and catalogue cutters. " +
+        "mode: tip/cylinder/through for drilling, slot/shoulder for milling. widthMm is the exact hole diameter or available milling width. " +
+        "All dimensions in mm. operationUnits is metric or imperial as displayed by ENCY. Use the returned installed ID and Identity for assignment.")]
+    public async Task<string> FindToolsForSelectedOperation(string operationUnits,string mode,double widthMm,double depthMm,int processId,
+        double breakthroughMm=0,double? innerRadiusMm=null,string material="",string? spindle=null,int page=0,int size=20)
+    {
+        if(size is <1 or >50 || page<0)return "ERROR: invalid page.";
+        var local=await Run("machine-fit",processId,GeometryArgs(operationUnits,mode,widthMm,depthMm,breakthroughMm,innerRadiusMm));
+        if(local.StartsWith("ERROR",StringComparison.Ordinal))return local;
+        var remote=await Replies.WithToken(tokens,async token=> (mode is "slot" or "shoulder"
+            ? await api.FindMills(mode,widthMm,depthMm,innerRadiusMm,material,spindle,page,size,token)
+            : await api.FindDrills(widthMm,depthMm,mode,breakthroughMm,material,page,size,token,spindle)).ToJsonString());
+        return $"On machine: {local}\nWarehouse and catalogue: {remote}";
+    }
+
+    [McpServerTool(Name="assign_installed_operation_tool"),Description("Assign an already installed project or magazine tool, without import. Confirm the target with the user. Repeat the exact search dimensions, ID and Identity from find_tools_for_selected_operation. Does not save the project.")]
+    public Task<string> AssignInstalledOperationTool(int processId,string projectPath,string operationId,string toolId,string identity,
+        string operationUnits,string mode,double widthMm,double depthMm,double breakthroughMm=0,double? innerRadiusMm=null) =>
+        Run("machine-assign",processId,[.. GeometryArgs(operationUnits,mode,widthMm,depthMm,breakthroughMm,innerRadiusMm),projectPath,operationId,toolId,identity]);
+
+    [McpServerTool(Name="assign_operation_mill"),Description("After user confirmation, assign the selected catalogue end mill or saved assembly to the selected milling operation. Use IDs from get_milling_operation and find_operation_mills. Does not save the project.")]
+    public Task<string> AssignOperationMill(int processId,string projectPath,string operationId,string componentId,string? libraryId=null,string? assemblyId=null) =>
+        AssignCutter(true,processId,projectPath,operationId,componentId,libraryId,assemblyId);
 
     [McpServerTool(Name = "assign_operation_drill"), Description(
         "Import one selected drill or saved warehouse assembly and assign it to the selected ENCY drilling operation. " +
@@ -72,6 +105,9 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         "and the componentId, optional libraryId and assemblyId from find_operation_drills. Does not save the project.")]
     public Task<string> AssignOperationDrill(int processId, string projectPath, string operationId, string componentId,
         string? libraryId = null, string? assemblyId = null) =>
+        AssignCutter(false,processId,projectPath,operationId,componentId,libraryId,assemblyId);
+
+    private Task<string> AssignCutter(bool mill,int processId,string projectPath,string operationId,string componentId,string? libraryId,string? assemblyId) =>
         Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(componentId) is not { } cid) return Ids.NotAComponent(componentId);
@@ -79,9 +115,9 @@ public sealed class LocalEncyTools(IToolsApi api, TokenProvider tokens)
                 || (libraryId == null) != (assemblyId == null)
                 || (libraryId != null && (!Guid.TryParse(libraryId,out _) || !Guid.TryParse(assemblyId,out _))))
                 return "ERROR: specify the selected project and operation, and both warehouse IDs or neither.";
-            var file = await api.ExportDrill(cid, libraryId, assemblyId, token);
+            var file = mill ? await api.ExportMill(cid,libraryId,assemblyId,token) : await api.ExportDrill(cid, libraryId, assemblyId, token);
             var path = DrillFileCache.Store(file.Bytes);
-            return await Run("drill-assign", processId, [projectPath, operationId, path]);
+            return await Run(mill ? "mill-assign" : "drill-assign", processId, [projectPath, operationId, path]);
         });
 
     private static async Task<string> Run(string operation, int? pid, string[] arguments)

@@ -79,7 +79,9 @@ public record ComponentQuery(string? Query = null, string? Kit = null, string? C
 /// <summary>Every route of tools.encycam.com, called as the person signed in.</summary>
 public interface IToolsApi
 {
-    Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm, string material, int page, int size, string token);
+    Task<JsonObject> FindMills(string operation, double widthMm, double depthMm, double? innerRadiusMm, string material, string? spindle, int page, int size, string token);
+    Task<DownloadedFile> ExportMill(string componentId, string? libraryId, string? assemblyId, string token);
+    Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm, string material, int page, int size, string token, string? spindle = null);
     Task<DownloadedFile> ExportDrill(string componentId, string? libraryId, string? assemblyId, string token);
     string Site { get; }
     Task<Account> GetMe(string token);
@@ -277,9 +279,15 @@ public class ToolsApi : IToolsApi
         Send<Library>(HttpMethod.Put, $"/me/libraries/{Esc(library)}/assemblies/{Esc(assembly)}", token, patch);
 
     public Task<JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm,
-        string material, int page, int size, string token) => Get<JsonObject>("/drills" + Params(
+        string material, int page, int size, string token, string? spindle = null) => Get<JsonObject>("/drills" + Params(
             ("diameter", diameterMm), ("depth", depthMm), ("bottom", bottom), ("breakthrough", breakthroughMm),
-            ("material", material), ("page", page), ("size", size)), token);
+            ("material", material), ("page", page), ("size", size), ("spindle", spindle)), token);
+
+    public Task<JsonObject> FindMills(string operation, double widthMm, double depthMm, double? innerRadiusMm, string material,
+        string? spindle, int page, int size, string token) => Get<JsonObject>("/mills" + Params(("operation",operation),("width",widthMm),
+        ("depth",depthMm),("innerRadius",innerRadiusMm),("material",material),("spindle",spindle),("cursor",page),("size",size)),token);
+    public async Task<DownloadedFile> ExportMill(string componentId, string? libraryId, string? assemblyId, string token) =>
+        await FileOf(await SendForFile(HttpMethod.Get,$"/mills/{Esc(componentId)}/tool.sc12tool"+Params(("library",libraryId),("assembly",assemblyId)),token),"Mill.sc12tool");
 
     public async Task<DownloadedFile> ExportDrill(string componentId, string? libraryId, string? assemblyId, string token) =>
         await FileOf(await SendForFile(HttpMethod.Get, $"/drills/{Esc(componentId)}/tool.sc12tool"

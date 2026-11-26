@@ -10,7 +10,7 @@ namespace ToolsMcp;
 
 // The installed CAMIPC interop assemblies describe the ABI of that ENCY release. No ENCY binaries are redistributed.
 [SupportedOSPlatform("windows")]
-internal static class EncyIpc
+internal static partial class EncyIpc
 {
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr LoadLibraryExW(string path, IntPtr reserved, uint flags);
@@ -28,7 +28,7 @@ internal static class EncyIpc
         try
         {
             if (args.Length < 2 || !int.TryParse(args[1], out int pid) ||
-                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _]))
+                !(args is ["list", _] or ["import", _, _, _, _] or ["operations", _, _, _] or ["cutting", _, _, _, _, _, _, _, _] or ["drill-context", _, _] or ["drill-assign", _, _, _, _] or ["mill-assign", _, _, _, _] or ["mill-context", _, _] or ["machine-fit", _, _, _, _, _, _, _] or ["machine-assign", _, _, _, _, _, _, _, _, _, _, _]))
                 throw new ArgumentException("Invalid local ENCY command.");
             using var process = Process.GetProcessById(pid);
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
@@ -61,15 +61,17 @@ internal static class EncyIpc
             var app = helper.Object("GetRunningCamApp", pid);
             var project = app.Object("GetActiveProject");
             var path = project.Text("GetFilePath");
-            if (args[0] is "drill-context" or "drill-assign")
+            if(args[0] is "machine-fit" or "machine-assign" or "mill-context")
+                return MachineCommand(args,project,assemblies,path);
+            if (args[0] is "drill-context" or "drill-assign" or "mill-assign")
             {
                 var tech = project.Object("GetTechnologist");
                 var op = tech.Object("get_CurrentOperation");
                 var id = op.Text("GetId");
                 var xml = op.Object("get_XMLProp");
-                if (xml.Count("get_PropExists", "DrillingType") == 0 || xml.Count("GetInteger","DrillingType") is < 0 or > 3)
-                    throw new InvalidOperationException("Select a drilling operation first.");
-                if (args[0] == "drill-assign")
+                if (!SuitableCycle(xml,args[0]=="mill-assign"))
+                    throw new InvalidOperationException(args[0]=="mill-assign" ? "Select a supported milling operation." : "Select a drilling operation first.");
+                if (args[0] is "drill-assign" or "mill-assign")
                 {
                     if (string.IsNullOrWhiteSpace(path) || !string.Equals(path,args[2],StringComparison.OrdinalIgnoreCase)
                         || !string.Equals(id,args[3],StringComparison.OrdinalIgnoreCase))
@@ -103,7 +105,11 @@ internal static class EncyIpc
                     var depth=(Convert.ToDouble(hole.Call("get_TopLevel",[]).Value)-Convert.ToDouble(hole.Call("get_BottomLevel",[]).Value))*scale;
                     bool resolved=hole.Call("get_TopLevelMode",[]).Value?.ToString()!="htlmDefault" &&
                         hole.Call("get_BottomLevelMode",[]).Value?.ToString()!="hblmDefault";
-                    holes.Add(new {diameterMm=double.IsFinite(diameter)&&diameter>0?(double?)diameter:null,
+                    var geometry = FeatureGeometry(project,assemblies,item.Text("get_Caption"),diameter,scale,false);
+                    string? bottom=geometry?.Kind;
+                    if(bottom=="blind") bottom=hole.Call("get_DrillTipCompensation",[]).Value?.ToString() switch
+                    { "hdtNone"=>"tip","hdtToolTip"=>"cylinder",_=>"blind" };
+                    holes.Add(new {bottom,diameterMm=double.IsFinite(diameter)&&diameter>0?(double?)diameter:null,
                         depthMm=resolved && double.IsFinite(depth)&&depth>0?(double?)depth:null});
                 }
                 const string mat="ConditionsSection.Workpiece.Material";

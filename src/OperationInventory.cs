@@ -1,0 +1,130 @@
+using System.Globalization;
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Text.Json;
+
+namespace ToolsMcp;
+
+internal static partial class EncyIpc
+{
+    private sealed record Shape(string Kind,double Height,double? Corner = null);
+    private static bool SuitableCycle(Handle xml,bool mill) => mill
+        ? xml.Text("get_Name") is "TST2DContouringOp" or "TST25DContouringOp" or "TST25DPocketingOp"
+             or "TSTPocketingOp" or "TSTRoughingWaterlineOp" or "TSTPlaneWaterlineOp"
+        : xml.Count("get_PropExists","DrillingType")!=0 && xml.Count("GetInteger","DrillingType") is >=0 and <=3;
+
+    private static Shape? FeatureGeometry(Handle project, AssemblyLoadContext runtime, string path, double diameter, double scale, bool mill)
+    {
+        if(!path.Contains('\\'))return null;
+        try {
+            var finder=project.Object("get_FeatureFinder");
+            var matrix=finder.Type.GetMethod("GetFeaturesForNode")!.GetParameters()[2].ParameterType;
+            if(matrix.IsByRef)matrix=matrix.GetElementType()!;
+            var list=finder.Object("GetFeaturesForNode",path,false,Activator.CreateInstance(matrix));
+            var type=runtime.LoadFromAssemblyName(new AssemblyName("CAMIPC.FeatureFinder"))
+                .GetType("CAMIPC.FeatureFinder."+(mill?"ICamIpcPocketFeature":"ICamIpcHoleFeature"),true)!;
+            var found=new HashSet<Shape>();
+            void Visit(Handle feature,int level) {
+                if(level>6 || feature.Count("get_IsValid")==0)return;
+                if(type.IsInstanceOfType(feature.Value)){
+                    var shape=new Handle(feature.Value,type);
+                    double Number(string key)=>Convert.ToDouble(shape.Call("get_"+key,[]).Value);
+                    double height=Number("Height")*scale;
+                    if(mill && height>0) {
+                        double radius=Number("MinCornerRadius")*scale;
+                        found.Add(new Shape(shape.Call("get_PocketType",[]).Value?.ToString()=="captSide"?"shoulder":"pocket",height,radius>0?radius:null));
+                    } else if(!mill && height>0 && Math.Abs(Number("Diameter")*scale-diameter)<1e-5)
+                        found.Add(new Shape(shape.Count("get_IsBlind")!=0?"blind":"through",height));
+                }
+                for(int i=0;i<feature.Count("get_SubFeatureCount");i++)Visit(feature.Object("get_SubFeature",i),level+1);
+            }
+            for(int i=0;i<list.Count("get_Count");i++)Visit(list.Object("get_Feature",i),0);
+            return found.Count==1?found.Single():null;
+        } catch(Exception){return null;}
+    }
+
+    private sealed record Installed(string ID,string Identity,string Caption,string Type,double DiameterMm,double ReachMm,
+        double? Angle,string Magazine,int Position,bool Node);
+    private static List<Installed> Inventory(Handle project,double scale) {
+        var result=new List<Installed>();
+        Handle? machine=null;
+        if(project.Type.GetMethod("get_MachineTools")!=null){
+            var obj=project.Call("get_MachineTools",[]);
+            if(obj.Value!=null)machine=new Handle(obj.Value,obj.Type);
+        }
+        if(machine!=null && machine.Count("GetMagazinesCount")>0){
+            for(int i=0;i<machine.Count("GetMagazinesCount");i++){
+                var mag=machine.Object("GetMagazine",i);
+                for(int j=0;j<mag.Count("GetToolsCount");j++){
+                    var node=mag.Object("GetTool",j);
+                    var component=node.Object("GetComponent");
+                    result.Add(new Installed(node.Count("get_NodeID").ToString(CultureInfo.InvariantCulture),
+                        Convert.ToString(component.Call("get_ID",[]).Value,CultureInfo.InvariantCulture)??"",node.Text("GetCaption"),component.Text("GetToolType"),
+                        Convert.ToDouble(component.Call("GetDiameter",[]).Value),Convert.ToDouble(component.Call("GetWorkingLength",[]).Value),
+                        null,mag.Text("GetName"),node.Count("GetPosition"),true));
+                }
+            }
+            return result;
+        }
+        var tools=project.Object("get_ToolsList");
+        for(int i=0;i<tools.Count("get_Count");i++){
+            var tool=tools.Object("get_ToolInfo",i);var props=tool.Object("get_ToolProperties");
+            double Read(string k)=>props.Count("get_PropExists","Properties."+k)==0?0:Convert.ToDouble(props.Call("GetFloat",["Properties."+k]).Value);
+            var limits=new[]{Read("WorkingLength"),Read("ShoulderLength")}.Where(n=>n>0&&double.IsFinite(n)).ToArray();
+            if(limits.Length==0 || !(Read("Length")>0))continue;
+            result.Add(new Installed(tool.Text("get_ToolID"),tool.Text("get_ToolGUID"),tool.Text("get_ToolCaption"),tool.Text("get_ToolType"),
+                Read("Diameter")*scale,Math.Min(Read("Length"),limits.Min())*scale,Read("Angle"),tool.Text("get_ConnectorID"),tool.Count("get_ToolNumber"),false));
+        }
+        return result;
+    }
+
+    private static int MachineCommand(string[] args,Handle project,AssemblyLoadContext runtime,string path){
+        var tech=project.Object("GetTechnologist");var op=tech.Object("get_CurrentOperation");var xml=op.Object("get_XMLProp");
+        var id=op.Text("GetId");
+        if(args[2] is not ("metric" or "imperial"))throw new ArgumentException("Specify metric or imperial.");
+        double scale=args[2]=="imperial"?25.4:1;
+        if(args[0]=="mill-context"){
+            if(!SuitableCycle(xml,true))throw new InvalidOperationException("Select a contouring, pocketing or roughing milling operation.");
+            var job=op.Object("get_ModelFormerJobAssignment");var features=new List<Shape?>();
+            for(int i=0;i<job.Count("get_Count");i++)features.Add(FeatureGeometry(project,runtime,job.Object("get_Item",i).Text("get_Caption"),0,scale,true));
+            const string key="ConditionsSection.Workpiece.Material";
+            Console.WriteLine(JsonSerializer.Serialize(new{projectPath=path,operationId=id,operationName=op.Text("GetName"),
+                material=xml.Count("get_PropExists",key)==0?null:xml.Text("GetString",key),features,availableWidthMm=(double?)null}));
+            return 0;
+        }
+        string mode=args[3];
+        bool mill=mode is "slot" or "shoulder";
+        if(!SuitableCycle(xml,mill))throw new InvalidOperationException("Selected operation does not match the search.");
+        double Parse(string s)=>double.Parse(s,CultureInfo.InvariantCulture);
+        double width=Parse(args[4]),depth=Parse(args[5]),extra=Parse(args[6]);double? radius=args[7].Length==0?null:Parse(args[7]);
+        if(mode is not ("slot" or "shoulder" or "tip" or "cylinder" or "through") || !double.IsFinite(width)||width<=0
+            || !double.IsFinite(depth)||depth<=0||!double.IsFinite(extra)||extra<0||(mode!="through"&&extra!=0)
+            ||(radius is double r && (!double.IsFinite(r)||r<0)))throw new ArgumentException("Invalid search dimensions.");
+        var results=Inventory(project,scale).Where(t=>{
+            var shape=t.Type.Split('.').Last();
+            if(!(t.DiameterMm>0 && t.ReachMm>0))return false;
+            if(mill)return shape.Equals("EndMill",StringComparison.OrdinalIgnoreCase) && t.DiameterMm<=width && (radius==null||t.DiameterMm<=2*radius)&&t.ReachMm>=depth;
+            if(!shape.Equals("Drill",StringComparison.OrdinalIgnoreCase)||Math.Abs(t.DiameterMm-width)>1e-7)return false;
+            return mode=="tip"?t.ReachMm>=depth:t.Angle is >0 and <=180 && t.ReachMm>=depth+extra+(t.Angle==180?0:t.DiameterMm/(2*Math.Tan(Math.PI*t.Angle.Value/360)));
+        }).ToList();
+        if(args[0]=="machine-fit"){
+            Console.WriteLine(JsonSerializer.Serialize(new{projectPath=path,operationId=id,installed=results}));
+            return 0;
+        }
+        if(string.IsNullOrWhiteSpace(path)||!string.Equals(path,args[8],StringComparison.OrdinalIgnoreCase)||!string.Equals(id,args[9],StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Selected project or operation changed.");
+        var choice=results.SingleOrDefault(t=>t.ID==args[10] && !string.IsNullOrWhiteSpace(t.Identity) && t.Identity==args[11])
+            ?? throw new InvalidOperationException("Installed tool or geometry changed.");
+        if(choice.Node){
+            var type=runtime.LoadFromAssemblyName(new AssemblyName("CAMIPC.ToolAssemblies")).GetType("CAMIPC.ToolAssemblies.ICamIpcTechOperationWithToolAssembly",true)!;
+            var withTool=new Handle(op.Value,type);int n=int.Parse(choice.ID,CultureInfo.InvariantCulture);
+            withTool.Call("SetTool",[n]); if(withTool.Count("get_ToolNodeID")!=n)throw new InvalidOperationException("Magazine assignment not confirmed.");
+        }else{
+            project.Call("SetOperationTool",[id,choice.ID]);
+            var active=op.Object("get_XMLProp").Object("GetArray","ToolSection.Tools").Object("get_Itm",0);
+            if(active.Text("GetCalculatedString","ToolID")!=choice.ID)throw new InvalidOperationException("Project tool assignment not confirmed.");
+        }
+        Console.WriteLine($"{op.Text("GetName")} [{id}] → {choice.Magazine} T#{choice.Position} {choice.Caption}");
+        return 0;
+    }
+}

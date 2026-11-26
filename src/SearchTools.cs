@@ -8,21 +8,33 @@ namespace ToolsMcp;
 [McpServerToolType]
 public class SearchTools(IToolsApi api, TokenProvider tokens)
 {
+    [McpServerTool(Name = "find_operation_mills", ReadOnly = true), Description(
+        "Find square end mills for slot or shoulder milling by available cutter width, axial depth and optional inside corner radius (mm). " +
+        "Matched saved assemblies come first; specify the spindle interface to reject known incompatible mounts. Unknown mounts require checking. " +
+        "Material is optional; supplier data is shown only with permission. When hasMore is true, pass nextCursor on the next call.")]
+    public Task<string> FindOperationMills(string operation, double widthMm, double depthMm, double? innerRadiusMm = null,
+        string material = "", string? spindle = null, int cursor = 0, int size = 20) => Replies.WithToken(tokens, async token =>
+        {
+            if (operation is not ("slot" or "shoulder") || !double.IsFinite(widthMm) || widthMm<=0 || !double.IsFinite(depthMm) || depthMm<=0
+                || (innerRadiusMm is double r && (!double.IsFinite(r)||r<0)) || cursor<0 || size is <1 or >50) return "ERROR: invalid milling geometry or cursor.";
+            return (await api.FindMills(operation,widthMm,depthMm,innerRadiusMm,material,spindle,cursor,size,token)).ToJsonString();
+        });
+
     [McpServerTool(Name = "find_operation_drills", ReadOnly = true), Description(
         "Find standard drills by exact hole diameter and verified working reach in mm. " +
         "Matching saved assemblies in the caller's warehouse come first. bottom=tip measures to the point, " +
         "cylinder measures full-diameter blind depth, through adds point length and breakthroughMm. " +
-        "For cylinder/through the supplier must give a point angle. Optional material is a supplier material name, number or ISO group. " +
+        "For cylinder/through the supplier must give a point angle. Optional spindle filters known incompatible holders; unknown interfaces are marked. Material accepts published grade, number or ISO group. " +
         "Material data is shown only when available and permitted. Results include component and shelf/assembly IDs for assign_operation_drill.")]
     public Task<string> FindOperationDrills(double diameterMm, double depthMm, string bottom = "tip",
-        double breakthroughMm = 0, string material = "", int page = 0, int size = 20) =>
+        double breakthroughMm = 0, string material = "", int page = 0, int size = 20, string? spindle = null) =>
         Replies.WithToken(tokens, async token =>
         {
             if (!double.IsFinite(diameterMm) || diameterMm <= 0 || !double.IsFinite(depthMm) || depthMm <= 0
                 || bottom is not ("tip" or "cylinder" or "through") || !double.IsFinite(breakthroughMm)
                 || breakthroughMm < 0 || (bottom != "through" && breakthroughMm != 0) || page < 0 || size is < 1 or > 50)
                 return "ERROR: invalid drill dimensions, bottom type or page.";
-            var result = await api.FindDrills(diameterMm, depthMm, bottom, breakthroughMm, material, page, size, token);
+            var result = await api.FindDrills(diameterMm, depthMm, bottom, breakthroughMm, material, page, size, token, spindle);
             return result.ToJsonString();
         });
 

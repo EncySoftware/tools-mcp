@@ -45,6 +45,11 @@ Version 0.7.3 applies an article cutting condition to an operation in the open E
 | `export_assembly` | Downloads one saved assembly as an ENCY `.sc12tool` file. |
 | `update_assembly` | Changes the name, T number, place, spindle or measured gauge length of a saved assembly. |
 | `find_adapter_chain` | Finds a direct fit or a shortest chain of catalogued adapters between two component IDs, in either order. Resolve part numbers with `find_components` first. |
+| `find_operation_mills` | Slot and shoulder milling. Enter available cutter width, depth and optionally the smallest inside corner radius and spindle interface. Larger fitting square end mills are shown first within each source. Follow `nextCursor` while `hasMore` is true. |
+| `get_milling_operation` (local Windows) | Read the selected operation and recognized feature height and inside radius; unknown dimensions require input. |
+| `find_tools_for_selected_operation` (local Windows) | Search installed tools, then matching personal assemblies and catalogue tools. Specify ENCY units and the same dimensions as the catalogue search. |
+| `assign_installed_operation_tool` (local Windows) | Assign an existing project tool or magazine node, without importing it again. Rechecks the project, operation, geometry and tool identity. |
+| `assign_operation_mill` (local Windows) | Import the selected end mill or warehouse assembly into the selected milling operation after confirmation. |
 | `find_operation_drills` | Search by hole diameter and depth in mm. Returns compatible working lengths, matching personal assemblies first, and permitted supplier data for the requested material. Choose tip, full-diameter blind, or through depth with breakout. |
 | `get_drilling_operation` (local Windows) | Read the selected ENCY drilling cycle, hole dimensions and workpiece material when set. Supply the project's displayed units. |
 | `assign_operation_drill` (local Windows) | After confirming the target operation and drill, assign the selected component or saved assembly in the open project. Pass its IDs from the search and operation readout. |
