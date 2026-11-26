@@ -36,6 +36,19 @@ public class SharedToolPlanTests
         Assert.Equal("already",a.Selected!.Key.ToolId);Assert.Equal("common",b.Selected!.Key.ToolId);
     }
 
+    [Fact] public void ProjectPlanKeepsTheSourceOfTheWidthActuallyUsed()
+    {
+        var milling = new OperationBrief(Operation:"slot", Width:12, Depth:4, NoInsideCorner:true)
+            { WidthSource="rectangularInsideContour" };
+        var review=new GeometryReview("needsInput",["assignedTool"],[]);
+        var a=new ProjectAuditRow("one","Pocket","TSTPocketingOp",null,null,null,review,milling);
+        var audit=new AuditReport(1,"test.stcp","metric",0,[a,a with {OperationId="two"}],[],[]);
+        var rows=ProjectToolPlan.Rows(audit,new Dictionary<string,ProjectPlanGeometry>{{"two",new("two",WidthMm:10)}});
+        Assert.Equal("rectangularInsideContour",rows[0].Step.Geometry.WidthSource);
+        Assert.Equal("user",rows[1].Step.Geometry.WidthSource);
+        Assert.Equal(10,rows[1].Step.Geometry.Width);
+    }
+
     [Fact] public void ProjectPlannerUsesTheKnownMagazineAndRejectsConflictingHoleDimensions()
     {
         var drill=new AuditCutter("42","D10","Drill",10,48,118,"AxisS",2,"machineMagazine",Identity:"guid");

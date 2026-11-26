@@ -57,6 +57,7 @@ internal static class ProjectToolPlan
                 {
                     Operation = input?.Mode ?? b.Operation,
                     Width = input?.WidthMm ?? b.Width,
+                    WidthSource = input?.WidthMm.HasValue == true ? "user" : b.WidthSource,
                     Depth = input?.DepthMm ?? b.Depth,
                     InnerRadius = input?.InnerRadiusMm ?? b.InnerRadius,
                     NoInsideCorner = input?.NoInsideCorner ?? b.NoInsideCorner
