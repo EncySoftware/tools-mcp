@@ -88,7 +88,7 @@ internal static class ProjectToolChangePlan
                 attempted=true;
                 assign(current);
                 var actual=reread(row.Change);
-                if (!Same(actual.Before,current.After))
+                if (actual.Problem != null || !Same(actual.Before,current.After) || Digest(actual.After) != Digest(current.After))
                     throw new InvalidOperationException("ENCY did not confirm the requested assignment.");
                 Record(new(id,"applied")); changed=true;
             } catch(Exception e) {
@@ -96,7 +96,8 @@ internal static class ProjectToolChangePlan
                 if (attempted) {
                     try {
                         var actual=reread(row.Change);
-                        if (Same(actual.Before,row.After)) { status="appliedWithWarning"; changed=true; }
+                        if (actual.Problem != null && actual.Before == null) status="stateUnknown";
+                        else if (Same(actual.Before,row.After)) { status="appliedWithWarning"; changed=true; }
                         else if (actual.Before != null && !Same(actual.Before,row.Before) || actual.Before == null && row.Before != null)
                             status="changedUnexpectedly";
                     } catch {status="stateUnknown";}

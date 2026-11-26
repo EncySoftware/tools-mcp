@@ -51,6 +51,15 @@ public class ProjectToolChangePlanTests
         Assert.Equal("partial",result.Status);
     }
 
+    [Fact] public void UnreadablePostWriteStateIsReportedAsUnknown() {
+        var row=Row(Change());bool wrote=false;
+        var result=ProjectToolChangePlan.Apply(Confirm(Request(row),row),1,[row],
+            _=>wrote?row with {Before=null,After=null,Problem="Operation unavailable."}:row,
+            _=>wrote=true);
+        Assert.Equal("partial",result.Status);
+        Assert.Equal("stateUnknown",Assert.Single(result.Outcomes).Status);
+    }
+
     [Fact] public void InterruptedResponseRetainsCompletedWorkAndMarksInFlightUnknown()
     {
         var rows=new[]{Row(Change()),Row(Change()),Row(Change())};
