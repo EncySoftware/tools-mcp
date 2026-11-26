@@ -19,7 +19,7 @@ internal sealed record ProjectAuditRow(string OperationId, string OperationName,
     string? AssignedId, AuditCutter? AssignedTool, GeometryReview Review, OperationBrief? MillingGeometry = null, string? Machine = null, string? Setup = null, string? Error = null, RecognizedHole[]? RecognizedHoles = null);
 
 internal sealed record AuditReport(int ProcessId, string ProjectPath, string OperationUnits, double AdditionalBreakthroughMm,
-    List<ProjectAuditRow> Operations, List<AuditCutter> ProjectInventory, AuditQuestion[] Questions, AuditQuestion[]? CatalogueQuestions = null, bool? ProjectModified = null, string? UnitsSource = null);
+    List<ProjectAuditRow> Operations, List<AuditCutter> ProjectInventory, AuditQuestion[] Questions, AuditQuestion[]? CatalogueQuestions = null, bool? ProjectModified = null, string? UnitsSource = null, string? SelectedOperationId = null);
 internal sealed record AuditQuestion(string Field, string[] OperationIds);
 
 internal static class ProjectToolAudit

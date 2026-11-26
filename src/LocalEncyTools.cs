@@ -140,33 +140,46 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     [McpServerTool(Name="find_tools_for_selected_operation", ReadOnly=true), Description(
         "Search the selected project's installed magazine/tools first, then matching warehouse assemblies and catalogue cutters. " +
         "mode: tip/cylinder/through for drilling, slot/shoulder for milling. widthMm is the exact hole diameter or available milling width. " +
-        "Omit unknown geometry to read it from the operation; ask only the returned missing fields. All dimensions in mm. operationUnits defaults to auto, read from the selected operation. Tools in unverified lack a value needed to confirm the fit. Use ID and Identity from installed for assignment.")]
+        "Omit unknown geometry to read it from the operation. Missing fields can reuse verified local answers; set useRemembered=false to ignore them. All dimensions in mm. operationUnits defaults to auto, read from the selected operation. Tools in unverified lack a value needed to confirm the fit. Use ID and Identity from installed for assignment.")]
     public async Task<string> FindToolsForSelectedOperation(string operationUnits = "auto", string? mode = null, double? widthMm = null,
-        double? depthMm = null, int? processId = null, double breakthroughMm = 0, double? innerRadiusMm = null,
+        double? depthMm = null, int? processId = null, double? breakthroughMm = null, double? innerRadiusMm = null,
         string material = "", string? spindle = null, int page = 0, int size = 20, bool? noInsideCorner = null,
-        double? bottomRadiusMm = null,double? passDepthMm = null)
+        double? bottomRadiusMm = null,double? passDepthMm = null,bool useRemembered=true)
     {
         var raw = await Run("operation-context", processId, [operationUnits]);
         if (raw.StartsWith("ERROR", StringComparison.Ordinal)) return raw;
         var context = JsonNode.Parse(raw)!.AsObject();
-        var brief = OperationBrief.FromContext(context, mode, widthMm, depthMm, breakthroughMm, innerRadiusMm,
+        var brief = OperationBrief.FromContext(context, mode, widthMm, depthMm, breakthroughMm ?? 0, innerRadiusMm,
             noInsideCorner, material, spindle, page, size);
         if(bottomRadiusMm.HasValue && brief.BottomRadius.HasValue && Math.Abs(bottomRadiusMm.Value-brief.BottomRadius.Value)>1e-7)
             return "ERROR: supplied floor radius conflicts with the recognized pocket.";
         if(bottomRadiusMm.HasValue) brief=brief with{BottomRadius=bottomRadiusMm,BottomRadiusSource="user"};
         if(passDepthMm.HasValue) brief=brief with{PassDepth=passDepthMm};
+        var rememberedFields=new List<string>();
+        if(useRemembered && context["projectPath"]?.GetValue<string>() is {} path && Path.IsPathFullyQualified(path) &&
+           context["processId"]?.GetValue<int>() is int pid && context["operationId"]?.GetValue<string>() is {} id) {
+            var units=context["operationUnits"]!.GetValue<string>();
+            var lookup=await OperationAnswerStore.ForProject(path).ForSelection(path,id,pid,units,async ()=>{
+                var data=await Run("audit",pid,[units]);
+                return data.StartsWith("ERROR",StringComparison.Ordinal) ? null :
+                    System.Text.Json.JsonSerializer.Deserialize<AuditReport>(data,AuditOutput.Json);
+            });
+            if(lookup.Error!=null)return lookup.Error;
+            brief=OperationAnswerStore.FillMissing(brief,lookup.Answer,breakthroughMm.HasValue,rememberedFields);
+        }
         return await Replies.WithToken(tokens, async token => {
             var result = await api.FindOperationTools(brief, token);
             result["operationId"] = context["operationId"]?.DeepClone();
             result["operationUnits"] = context["operationUnits"]?.DeepClone();
             result["unitsSource"] = context["unitsSource"]?.DeepClone();
+            if(rememberedFields.Count>0)result["rememberedFields"]=System.Text.Json.JsonSerializer.SerializeToNode(rememberedFields);
             if(context["holes"] is JsonArray holes) {
                 var features=holes.SelectMany(h=>h?["recognized"] as JsonArray ?? []).Where(h=>h!=null)
                     .DistinctBy(h=>h!["assignedNode"]?.ToString()+"|"+h["featureId"]?.ToString());
                 result["recognizedHoleGeometry"]=new JsonArray(features.Select(h=>h!.DeepClone()).ToArray());
             }
             if (context.ContainsKey("features"))
-                result["widthSource"] = widthMm.HasValue ? "user" : context["widthSource"]?.DeepClone();
+                result["widthSource"] = brief.WidthSource;
             result["projectPath"] = context["projectPath"]?.DeepClone();
             if(brief.Operation=="pocket"){
                 result["bottomRadiusSource"]=brief.BottomRadiusSource;
@@ -176,7 +189,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             if (result["status"]?.GetValue<string>() != "ready") return result.ToJsonString();
             var fit = await Run("machine-fit", context["processId"]?.GetValue<int>() ?? processId,
                 GeometryArgs(context["operationUnits"]!.GetValue<string>(), brief.Bottom ?? brief.Operation!, (brief.Diameter ?? brief.Width)!.Value,
-                    brief.Depth!.Value, breakthroughMm, brief.InnerRadius));
+                    brief.Depth!.Value, brief.Breakthrough ?? 0, brief.InnerRadius));
             if (fit.StartsWith("ERROR", StringComparison.Ordinal)) return fit;
             var local = JsonNode.Parse(fit)!.AsObject();
             if (!JsonNode.DeepEquals(context["operationId"], local["operationId"]) ||

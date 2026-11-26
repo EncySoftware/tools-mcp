@@ -187,7 +187,7 @@ internal static partial class EncyIpc
         try { modified=project.Count("GetIsModified")!=0; }
         catch(Exception e) when (ReadError(e)) { }
         var report = new AuditReport(pid,path,verified,0,rows,inventory.Select(Describe).ToList(),
-            ProjectToolAudit.Questions(rows),catalogueQuestions.ToArray(),modified,units=="auto"?"verifiedOperationExports":"caller");
+            ProjectToolAudit.Questions(rows),catalogueQuestions.ToArray(),modified,units=="auto"?"verifiedOperationExports":"caller",Optional(()=>tech.Object("get_CurrentOperation").Text("GetId")));
         Console.WriteLine(JsonSerializer.Serialize(report, AuditOutput.Json));
         return 0;
     }

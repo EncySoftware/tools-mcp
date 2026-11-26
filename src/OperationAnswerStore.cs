@@ -11,11 +11,64 @@ namespace ToolsMcp;
 internal sealed class OperationAnswerStore(string directory)
 {
     private sealed record Remembered(string ProjectHash,string GeometryHash,ProjectPlanGeometry Values);
-    internal static OperationAnswerStore For(AuditReport report) => new(Path.Combine(
+    internal static OperationAnswerStore For(AuditReport report) => ForProject(report.ProjectPath);
+    internal static OperationAnswerStore ForProject(string path) => new(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"EncySoftware","ToolsMcp","operation-answers",
-        Hash(Path.GetFullPath(report.ProjectPath).ToUpperInvariant())));
+        Hash(Path.GetFullPath(path).ToUpperInvariant())));
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     private string FileOf(string id) => Path.Combine(directory,Hash(id.ToUpperInvariant())+".json");
+    internal bool HasAnswer(string id) => !string.IsNullOrWhiteSpace(id) && File.Exists(FileOf(id));
+
+    internal async Task<(ProjectPlanGeometry? Answer,string? Error)> ForSelection(string path,string id,int pid,
+        string units,Func<Task<AuditReport?>> audit)
+    {
+        if(!HasAnswer(id)) return (null,null);
+        var report=await audit();
+        if(report==null) return (null,null);
+        if(report.ProcessId!=pid || !string.Equals(report.ProjectPath,path,StringComparison.OrdinalIgnoreCase) ||
+           !string.Equals(report.SelectedOperationId,id,StringComparison.OrdinalIgnoreCase) || report.OperationUnits!=units)
+            return (null,"ERROR: selected project, operation or units changed while checking remembered answers.");
+        var rows=report.Operations.Where(r=>string.Equals(r.OperationId,id,StringComparison.OrdinalIgnoreCase)).ToList();
+        if(rows.Count!=1) return (null,"ERROR: selected operation could not be identified in the project audit.");
+        Read(report with {Operations=rows}).TryGetValue(id,out var answer);
+        return (answer,null);
+    }
+
+    // Explicit input and known geometry have already been applied to the brief.
+    internal static OperationBrief FillMissing(OperationBrief current,ProjectPlanGeometry? saved,
+        bool explicitBreakthrough,List<string> fields)
+    {
+        if(saved==null) return current;
+        if(current.Operation=="drilling") {
+            if(current.Diameter==null && saved.WidthMm!=null) { current=current with{Diameter=saved.WidthMm};fields.Add("diameter"); }
+            bool bottomMissing=current.Bottom==null || current.Bottom=="blind" && saved.Mode is ("tip" or "cylinder");
+            if(bottomMissing && saved.Mode is ("through" or "tip" or "cylinder")) {
+                current=current with{Bottom=saved.Mode};fields.Add("bottom");
+            }
+            if(!explicitBreakthrough && current.Bottom=="through" && saved.BreakthroughMm!=null) {
+                current=current with{Breakthrough=saved.BreakthroughMm};fields.Add("breakthrough");
+            }
+        } else {
+            if(current.Operation=="milling" && saved.Mode is ("slot" or "shoulder" or "pocket")) {
+                current=current with{Operation=saved.Mode};fields.Add("operation");
+            }
+            if(current.Width==null && saved.WidthMm!=null) {
+                current=current with{Width=saved.WidthMm,WidthSource="remembered"};fields.Add("width");
+            }
+            if(current.InnerRadius==null && current.NoInsideCorner!=true && saved.InnerRadiusMm!=null) {
+                current=current with{InnerRadius=saved.InnerRadiusMm};fields.Add("innerRadius");
+            } else if(current.InnerRadius==null && current.NoInsideCorner==null && saved.NoInsideCorner==true) {
+                current=current with{NoInsideCorner=true};fields.Add("noInsideCorner");
+            }
+            if(current.Operation=="pocket" && current.BottomRadius==null && saved.BottomRadiusMm!=null) {
+                current=current with{BottomRadius=saved.BottomRadiusMm,BottomRadiusSource="remembered"};fields.Add("bottomRadius");
+            }
+            if(current.PassDepth==null && saved.PassDepthMm!=null) {current=current with{PassDepth=saved.PassDepthMm};fields.Add("passDepth");}
+        }
+        if(current.Depth==null && saved.DepthMm!=null) {current=current with{Depth=saved.DepthMm};fields.Add("depth");}
+        return current;
+    }
+
     private static string Stamp(ProjectAuditRow row,AuditReport report) => ProjectToolChangePlan.Digest(new {
         report.OperationUnits,row.OperationId,row.OperationType,row.Setup,row.Machine,row.Material,row.MillingGeometry,row.Review.HoleGroups
     });
@@ -37,7 +90,9 @@ internal sealed class OperationAnswerStore(string directory)
                 hash??=SavedHash(report);
                 if(hash==null) break;
                 var entry=JsonSerializer.Deserialize<Remembered>(File.ReadAllText(file),AuditOutput.Json);
-                if(entry?.ProjectHash==hash && entry.GeometryHash==Stamp(row,report)) result[row.OperationId]=entry.Values;
+                if(entry is { Values: {} values } && entry.ProjectHash==hash &&
+                   string.Equals(values.OperationId,row.OperationId,StringComparison.OrdinalIgnoreCase) && entry.GeometryHash==Stamp(row,report))
+                    result[row.OperationId]=values;
             } catch(Exception e) when(e is JsonException or IOException or UnauthorizedAccessException) { }
         }
         return result;
@@ -76,7 +131,7 @@ public sealed partial class LocalEncyTools
         "Remember or forget operator-supplied dimensions for one operation in the current saved project. " +
         "Stored privately on this computer. The common project planner checks project contents and operation geometry before reuse. " +
         "Pass forget=true to clear the saved answer. Does not save the project.")]
-    public async Task<string> RememberProjectToolAnswers(string operationUnits,ProjectPlanGeometry answer,int? processId=null,bool forget=false)
+    public async Task<string> RememberProjectToolAnswers(ProjectPlanGeometry answer,string operationUnits="auto",int? processId=null,bool forget=false)
     {
         var raw=await AuditProjectTools(operationUnits,processId);
         if(raw.StartsWith("ERROR",StringComparison.Ordinal))return raw;
