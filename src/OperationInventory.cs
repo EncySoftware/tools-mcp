@@ -100,10 +100,11 @@ internal static partial class EncyIpc
         double scale=args[2]=="imperial"?25.4:1;
         if(args[0]=="mill-context"){
             if(!SuitableCycle(xml,true))throw new InvalidOperationException("Select a contouring, pocketing or roughing milling operation.");
-            var features = ReadMillShapes(op, project, runtime, scale);
+            var geometry = ReadMillGeometry(op, project, runtime, scale);
             const string key="ConditionsSection.Workpiece.Material";
             Console.WriteLine(JsonSerializer.Serialize(new{processId=int.Parse(args[1],CultureInfo.InvariantCulture),projectPath=path,operationId=id,operationName=op.Text("GetName"),
-                material=xml.Count("get_PropExists",key)==0?null:xml.Text("GetString",key),features,availableWidthMm=(double?)null}));
+                material=xml.Count("get_PropExists",key)==0?null:xml.Text("GetString",key),
+                features=geometry.Features,availableWidthMm=geometry.AvailableWidthMm,widthSource=geometry.WidthSource}));
             return 0;
         }
         string mode=args[3];

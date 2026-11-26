@@ -9,6 +9,7 @@ public sealed record OperationBrief(string? Operation = null, double? Diameter =
     string? Hand = null, string? Tolerance = null, string? Side = null, string? HolderInterface = null,
     string? InsertId = null, double? AxialReach = null)
 {
+    public string? WidthSource { get; init; }
     internal static OperationBrief FromContext(JsonObject context, string? mode, double? width, double? depth,
         double breakthrough, double? radius, bool? noInsideCorner, string material, string? spindle, int offset, int size)
     {
@@ -28,7 +29,7 @@ public sealed record OperationBrief(string? Operation = null, double? Diameter =
         bool shoulder = shapes.Count > 0 && shapes.All(s => s?["Kind"]?.GetValue<string>() == "shoulder");
         return new(mode ?? (shoulder ? "shoulder" : "milling"), null, width ?? context["availableWidthMm"]?.GetValue<double>(),
             depth ?? heights?.Max(), null, null, radius ?? (noInsideCorner == true ? null : corners?.Min()), noInsideCorner,
-            material, spindle, offset, size);
+            material, spindle, offset, size) { WidthSource = width.HasValue ? "user" : context["widthSource"]?.GetValue<string>() };
     }
 
     private static double[]? Numbers(JsonArray entries, string field)

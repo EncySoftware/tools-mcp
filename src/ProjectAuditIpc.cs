@@ -38,13 +38,20 @@ internal static partial class EncyIpc
         return holes;
     }
 
-    private static List<Shape?> ReadMillShapes(Handle op, Handle project, AssemblyLoadContext runtime, double scale)
+    private sealed record MillGeometry(List<Shape?> Features, double? AvailableWidthMm, string? WidthSource);
+
+    private static MillGeometry ReadMillGeometry(Handle op, Handle project, AssemblyLoadContext runtime, double scale)
     {
         var job = op.Object("get_ModelFormerJobAssignment");
         var features = new List<Shape?>();
-        for (int i = 0, count = job.Count("get_Count"); i < count; i++)
-            features.Add(FeatureGeometry(project,runtime,job.Object("get_Item",i).Text("get_Caption"),0,scale,true));
-        return features;
+        OpeningWidth? width = null;
+        for (int i = 0, count = job.Count("get_Count"); i < count; i++) {
+            var item = job.Object("get_Item", i);
+            features.Add(FeatureGeometry(project,runtime,item.Text("get_Caption"),0,scale,true));
+            // A second assigned item may be an island, an exclusion or another pocket.
+            if (count == 1) width = ReadOpeningWidth(op,project,item,runtime,scale);
+        }
+        return new(features, width?.WidthMm, width?.Source);
     }
 
     private static double? PositiveMm(double value) => double.IsFinite(value) && value > 0 ? value : null;
@@ -89,7 +96,9 @@ internal static partial class EncyIpc
         var snapshot = new OperationSnapshot(id,name,type,machine,setup,material,nodeId,legacyId,null,null,null);
         try {
             if (SuitableCycle(xml,true)) {
-                var context = new JsonObject { ["features"] = JsonSerializer.SerializeToNode(ReadMillShapes(op,project,runtime,scale)) };
+                var geometry = ReadMillGeometry(op,project,runtime,scale);
+                var context = new JsonObject { ["features"] = JsonSerializer.SerializeToNode(geometry.Features),
+                    ["availableWidthMm"] = geometry.AvailableWidthMm, ["widthSource"] = geometry.WidthSource };
                 return snapshot with { Mill = OperationBrief.FromContext(context,null,null,null,0,null,null,material ?? "",null,0,20) };
             }
             return SuitableCycle(xml,false) ? snapshot with { Holes = ReadHoles(op,project,runtime,scale) } : snapshot;

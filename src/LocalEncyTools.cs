@@ -106,7 +106,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         return $"Saved {report.Operations.Count} operation rows: {path}";
     }
 
-    [McpServerTool(Name="get_milling_operation", ReadOnly=true), Description("Read the selected ENCY milling operation and recognized pocket/side height and inside radius. Supply available slot or shoulder width when not specified by geometry.")]
+    [McpServerTool(Name="get_milling_operation", ReadOnly=true), Description("Read the selected ENCY milling operation. Recognized geometry can provide pocket/side height, inside radius and available cutter width in mm. widthSource identifies a rectangular inside contour, a rectangular pocket floor or parallel walls of a recognized slot. Ask for width if unresolved.")]
     public Task<string> GetMillingOperation(string operationUnits,int? processId=null) =>
         Run("mill-context",processId,[operationUnits]);
 
@@ -130,6 +130,8 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         return await Replies.WithToken(tokens, async token => {
             var result = await api.FindOperationTools(brief, token);
             result["operationId"] = context["operationId"]?.DeepClone();
+            if (context.ContainsKey("features"))
+                result["widthSource"] = widthMm.HasValue ? "user" : context["widthSource"]?.DeepClone();
             result["projectPath"] = context["projectPath"]?.DeepClone();
             if (result["status"]?.GetValue<string>() != "ready") return result.ToJsonString();
             var fit = await Run("machine-fit", context["processId"]?.GetValue<int>() ?? processId,
