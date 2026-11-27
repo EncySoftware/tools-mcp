@@ -123,7 +123,8 @@ internal static class SharedToolPlan
                 if (!cache.TryGetValue(b, out var answer))
                 {
                     try { answer = await api.FindOperationTools(b, token); }
-                    catch (ToolsHttpException e) when ((int)e.Status == 400) { row.Error = e.Message; break; }
+                    // 404 is the site naming an insert it does not know: that row fails, the plan goes on
+                    catch (ToolsHttpException e) when (e.Status is 400 or 404) { row.Error = e.Message; break; }
                     cache[b] = answer;
                 }
                 if (answer["status"]?.GetValue<string>() == "needs_input")

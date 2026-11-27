@@ -103,4 +103,14 @@ public class SharedToolPlanTests
         Assert.Contains(row.Hits,h=>h.Key.Source=="catalogue");
         Assert.Contains("spindle",row.Questions);
     }
+
+    /// <summary>The site answers an insert ID it does not know with 404 and says so: one row, not the whole plan.</summary>
+    [Fact] public async Task AnUnknownInsertFailsItsOwnRowAndTheRestOfThePlanGoesOn()
+    {
+        var api=new FakeToolsApi { OperationError=new ToolsHttpException(404,"{\"message\":\"Insert 0f1e is not in the catalogue.\"}") };
+        var row=new PlanRow(new PlanStep("one",new OperationBrief(Operation:"turning",Side:"external",Hand:"right",Depth:2),"MX"));
+        await SharedToolPlan.AddCatalogue([row],api,"token",1);
+        Assert.Contains("not in the catalogue",row.Error);
+        Assert.Empty(row.Hits);
+    }
 }
