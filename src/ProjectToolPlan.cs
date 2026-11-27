@@ -70,6 +70,9 @@ internal static class ProjectToolPlan
                     PassDepth = input?.PassDepthMm ?? b.PassDepth
                 };
                 if (b.Operation is not ("slot" or "shoulder" or "pocket")) issues.Add("operation");
+                // a ball or toroidal cutter leaves a floor radius that a square end mill would lose without a word
+                if (op.Review.Status == "unsupportedTool")
+                    failure ??= "The assigned cutter is not a square end mill (ball or corner radius); it is not replaced by one automatically.";
                 if (b.Operation=="pocket" && b.BottomRadius==null) issues.Add("bottomRadius");
                 if (b.Width == null) issues.Add("width");
                 if (b.InnerRadius == null && b.NoInsideCorner != true) issues.Add("innerRadiusOrNoCorner");

@@ -62,4 +62,18 @@ public class SharedToolPlanTests
         Assert.True(rows[0].Hits[0].AlreadyAssigned);
         Assert.NotNull(rows[1].Error); Assert.Empty(rows[1].Hits);
     }
+
+    [Fact] public void ABallOrCornerRadiusCutterIsNotSwappedForASquareEndMill()
+    {
+        var ball=new AuditCutter("7","Ball D8","Mill.BallMill",8,30,null,"AxisS",7,"machineMagazine",Identity:"ball");
+        var square=new AuditCutter("8","End mill D8","Mill.EndMill",8,30,null,"AxisS",8,"machineMagazine",Identity:"square");
+        var milling=new OperationBrief(Operation:"slot",Width:10,Depth:5,NoInsideCorner:true);
+        var review=ProjectToolAudit.Mill(milling,ball);
+        Assert.Equal("unsupportedTool",review.Status);
+        var op=new ProjectAuditRow("one","Slot","TST2DContouringOp",null,"7",ball,review,milling);
+        var rows=ProjectToolPlan.Rows(new AuditReport(1,"test.stcp","metric",0,[op],[ball,square],[]),new Dictionary<string,ProjectPlanGeometry>());
+        // the floor radius a ball or toroidal cutter leaves would be lost without a word
+        Assert.Empty(rows[0].Hits);
+        Assert.Contains("square end mill",rows[0].Error);
+    }
 }
