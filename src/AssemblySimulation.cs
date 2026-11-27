@@ -39,22 +39,18 @@ internal static partial class EncyIpc
         var result=new Dictionary<Guid,SimulationOp>();
         Type? assemblyType = project.Type.GetMethod("get_MachineTools")==null ? null :
             runtime.LoadFromAssemblyName(new AssemblyName("CAMIPC.ToolAssemblies")).GetType("CAMIPC.ToolAssemblies.ICamIpcTechOperationWithToolAssembly");
-        void Children() {
-            if(iter.Count("MoveToChild")==0) return;
-            do {
-                var op=iter.Object("Current"); var xml=op.Object("get_XMLProp");
-                if (!xml.Text("get_Name").EndsWith("Group",StringComparison.OrdinalIgnoreCase)) {
-                    string id=op.Text("GetId");
-                    var assigned=Assignment(op,xml,assemblyType);
-                    var t=assigned.NodeId!=null ? inventory.FirstOrDefault(t=>t.Node && t.ID==assigned.NodeId) :
-                        inventory.FirstOrDefault(t=>!t.Node && t.ID==assigned.LegacyId);
-                    result.Add(Guid.Parse(id),new(op,id,op.Text("GetName"),t==null?null:Binding(t)));
-                }
-                Children();
-            } while(iter.Count("MoveToSibling")!=0);
-            if (iter.Count("MoveToParent")==0) throw new InvalidOperationException("Operation tree changed.");
-        }
-        Children();return result;
+        // the operations that cut: a group or a part copy holds them and reports them as its own
+        OperationTree.Walk(()=>iter.Count("MoveToChild")!=0, ()=>iter.Count("MoveToSibling")!=0, ()=>iter.Count("MoveToParent")!=0,
+            _=>iter.Object("Current"), (_,setup)=>setup, (op,parent)=>{
+                var xml=op.Object("get_XMLProp");
+                if (parent || xml.Text("get_Name").EndsWith("Group",StringComparison.OrdinalIgnoreCase)) return;
+                string id=op.Text("GetId");
+                var assigned=Assignment(op,xml,assemblyType);
+                var t=assigned.NodeId!=null ? inventory.FirstOrDefault(t=>t.Node && t.ID==assigned.NodeId) :
+                    inventory.FirstOrDefault(t=>!t.Node && t.ID==assigned.LegacyId);
+                result.Add(Guid.Parse(id),new(op,id,op.Text("GetName"),t==null?null:Binding(t)));
+            });
+        return result;
     }
 
     private static int AssemblySimulation(Handle helper,Handle app,Handle project,AssemblyLoadContext runtime,string path)

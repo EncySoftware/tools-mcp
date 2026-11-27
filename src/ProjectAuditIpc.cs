@@ -130,9 +130,9 @@ internal static partial class EncyIpc
                 .GetType("CAMIPC.ToolAssemblies.ICamIpcTechOperationWithToolAssembly");
 
         var operations = new List<OperationSnapshot>();
-        void VisitChildren(string? setup) {
-            if (iter.Count("MoveToChild") == 0) return;
-            do {
+        // a node with operations under it is a container and has no tool of its own, a part copy as much as a group
+        OperationTree.Walk(() => iter.Count("MoveToChild") != 0, () => iter.Count("MoveToSibling") != 0,
+            () => iter.Count("MoveToParent") != 0, setup => {
                 var op = iter.Object("Current");
                 bool group = op.Object("get_XMLProp").Text("get_Name").EndsWith("Group",StringComparison.OrdinalIgnoreCase);
                 if(units=="auto" && !group){
@@ -140,13 +140,10 @@ internal static partial class EncyIpc
                     if(verified!=null && current!=verified)throw new InvalidOperationException("Operations use different measurement systems. Inspect them individually.");
                     verified=current;
                 }
-                var s = Snapshot(op, project, runtime, verified=="imperial"?25.4:1, setup, assemblyType);
-                if (!group) operations.Add(s);
-                VisitChildren(s.Type == "TSTStageOpGroup" ? s.Name : setup);
-            } while (iter.Count("MoveToSibling") != 0);
-            if (iter.Count("MoveToParent") == 0) throw new InvalidOperationException("Operation tree changed during inspection.");
-        }
-        VisitChildren(null);
+                return (Snapshot: Snapshot(op, project, runtime, verified=="imperial"?25.4:1, setup, assemblyType), Group: group);
+            },
+            (node, setup) => node.Snapshot.Type == "TSTStageOpGroup" ? node.Snapshot.Name : setup,
+            (node, parent) => { if (!node.Group && !parent) operations.Add(node.Snapshot); });
 
         if(verified==null)throw new InvalidOperationException("No operation declares units for the project inventory. Specify metric or imperial.");
         double scale=verified=="imperial"?25.4:1;
