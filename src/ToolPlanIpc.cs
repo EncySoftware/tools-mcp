@@ -45,7 +45,11 @@ internal static partial class EncyIpc
     }
 
     private sealed record NativePlanReport(string Status,int ProcessId,string ProjectPath,string? PreviewId,
-        List<ToolChangeRow> Rows,List<ChangeOutcome>? Outcomes);
+        List<ToolChangeRow> Rows,List<ChangeOutcome>? Outcomes)
+    {
+        /// <summary>What ENCY changes besides the tool, said in the preview so the operator is not surprised after.</summary>
+        public string? SideEffects => ProjectToolChangePlan.SideEffects(Rows);
+    }
 
     private static int ToolPlanCommand(Handle app,Handle project,AssemblyLoadContext runtime,int pid,string path,string command)
     {

@@ -101,4 +101,15 @@ public class ProjectToolChangePlanTests
         Assert.Equal("unverified",(e with {AssemblyVerified=false}).Status);
         Assert.Equal("unverified",(e with {MachineChecks=false}).Status);
     }
+
+    [Fact] public void ThePreviewSaysWhatEncyChangesBesidesTheTool() {
+        var classic=Row(Change());
+        var kit=classic with {After=Binding("new") with {Source="machineMagazine"}};
+        Assert.Contains("feed, spindle speed, coolant and holder",ProjectToolChangePlan.SideEffects([classic]));
+        Assert.DoesNotContain("Auto",ProjectToolChangePlan.SideEffects([classic]));
+        Assert.Contains("correctors to Auto",ProjectToolChangePlan.SideEffects([kit]));
+        Assert.Contains("СОЖ",ProjectToolChangePlan.SideEffectsRu([classic,kit]));
+        Assert.Contains("Auto",ProjectToolChangePlan.SideEffectsRu([classic,kit]));
+        Assert.Null(ProjectToolChangePlan.SideEffects([classic with {After=null}]));
+    }
 }

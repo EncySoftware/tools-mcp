@@ -38,6 +38,7 @@ public sealed class LiveProjectChangeTools
                 .AppendLine($"Сейчас: {Label(row.Before)}")
                 .AppendLine($"Заменить на: {Label(row.After)}").AppendLine();
         }
+        if (ProjectToolChangePlan.SideEffectsRu(rows) is { } effects) summary.AppendLine(effects).AppendLine();
         summary.AppendLine("При ошибке уже выполненные замены останутся в памяти проекта.")
             .Append($"Время для подтверждения — {LiveBatchWorker.OperatorLimit.TotalMinutes:0} минут.");
         return BatchApprovalDialog.Show(summary.ToString(), rows.Count, disconnected);

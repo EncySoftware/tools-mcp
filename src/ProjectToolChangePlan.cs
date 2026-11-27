@@ -19,6 +19,29 @@ internal sealed record ChangeOutcome(string OperationId, string Status, string? 
 
 internal static class ProjectToolChangePlan
 {
+    /// <summary>
+    /// What ENCY changes besides the tool when it assigns one: a project tool list carries the feed, spindle speed,
+    /// coolant and holder of the tool's other operation; a machine kit resets the operation's correctors to Auto.
+    /// </summary>
+    internal static string? SideEffects(IEnumerable<ToolChangeRow> rows)
+    {
+        var notes = Sources(rows).Select(s => s == "projectToolList"
+            ? "from a project tool list ENCY copies the feed, spindle speed, coolant and holder of the tool's other operation"
+            : "from a machine kit ENCY resets the operation's correctors to Auto").ToList();
+        return notes.Count == 0 ? null : "Assigning changes more than the tool: " + string.Join("; ", notes) + ". Check them after applying.";
+    }
+
+    internal static string? SideEffectsRu(IEnumerable<ToolChangeRow> rows)
+    {
+        var notes = Sources(rows).Select(s => s == "projectToolList"
+            ? "из списка инструментов проекта ENCY переносит подачу, обороты, СОЖ и держатель другой операции этого инструмента"
+            : "из кита станка ENCY сбрасывает корректоры операции в Auto").ToList();
+        return notes.Count == 0 ? null : "ENCY при замене меняет не только инструмент: " + string.Join("; ", notes) + ". Проверьте их после замены.";
+    }
+
+    private static IEnumerable<string> Sources(IEnumerable<ToolChangeRow> rows) =>
+        rows.Select(r => r.After?.Source).OfType<string>().Where(s => s is "projectToolList" or "machineMagazine").Distinct().Order();
+
     internal static string? Validate(ToolPlanRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.ProjectPath) || request.OperationUnits is not ("metric" or "imperial") ||
