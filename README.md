@@ -110,7 +110,7 @@ Until the package is on nuget.org, install it from the `.nupkg` attached to the
 **Sign-in.** `tools-mcp login` opens the ENCY sign-in page in your browser.
 - Use the same account as on tools.encycam.com.
 - The tool keeps only a refresh token, in `%APPDATA%\tools-mcp\auth.json`, and never sees your password.
-- Supplier catalogues are visible only to a signed-in account, so every tool needs the sign-in.
+- Supplier catalogues are visible only to ENCY staff accounts (an encycam.com, encycam.io or sprut.ru address, or the ENCY company); any other sign-in sees ENCY's own open kits, as a guest does. Every tool needs the sign-in.
 
 **Something not working?** Run `tools-mcp doctor`. It prints one line per check:
 - the sign-in;
