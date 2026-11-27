@@ -128,10 +128,15 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     {
         var raw = await AuditProjectTools(operationUnits, processId);
         if (raw.StartsWith("ERROR:", StringComparison.Ordinal)) return raw;
-        var report = System.Text.Json.JsonSerializer.Deserialize<AuditReport>(raw, AuditOutput.Json)!;
+        try {
+        var report = System.Text.Json.JsonSerializer.Deserialize<AuditReport>(raw, AuditOutput.Json)
+            ?? throw new System.Text.Json.JsonException("The audit returned no report.");
         var filename = (Path.GetFileNameWithoutExtension(report.ProjectPath) is {Length: >0} name ? name : "Project") + "-setup.csv";
         var path = SavedFiles.Save(new DownloadedFile(filename, AuditOutput.SetupCsv(report)), outputFolder);
         return $"Saved {report.Operations.Count} operation rows: {path}";
+        } catch (Exception e) when (e is System.Text.Json.JsonException or IOException or UnauthorizedAccessException or ArgumentException) {
+            return "ERROR: could not write the setup sheet: " + e.Message;
+        }
     }
 
     [McpServerTool(Name="get_milling_operation", ReadOnly=true), Description("Read the selected ENCY milling operation. Recognized geometry can provide pocket/side height, inside radius and available cutter width in mm. widthSource identifies a rectangular inside contour, a rectangular pocket floor or parallel walls of a recognized slot. bottomRadiusMm comes from the recognized closed-bottom pocket; zero is a verified square floor corner, null requires clarification. Check bottomRadiusSource.")]

@@ -19,9 +19,9 @@ internal static class AuditOutput
         return library.Items.Select(entry => {
             var assembly = entry.Assembly;
             var part = assembly?.Parts.LastOrDefault() ?? entry;
-            string? raw = assembly?.Number?.Trim();
-            if (raw?.StartsWith("T", StringComparison.OrdinalIgnoreCase) == true) raw = raw[1..].TrimStart('#').Trim();
-            bool numbered = int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var number);
+            var slot = SlotNumber(assembly?.Number);
+            bool numbered = slot != null;
+            int number = slot ?? 0;
             var candidates = projectTools.Select(t => new ShelfCandidate(t, numbered && t.Position == number,
                     Equal(assembly?.Place, t.Magazine),
                     Equal(part.Reference?.Article, t.Name) || Equal(part.Name, t.Name) || Equal(entry.Name, t.Name)))
@@ -57,6 +57,15 @@ internal static class AuditOutput
             text.AppendLine(string.Join(";", fields.Select(Cell)));
         }
         return [..Encoding.UTF8.GetPreamble(), ..Encoding.UTF8.GetBytes(text.ToString())];
+    }
+
+    /// <summary>A recorded slot as T71, #71, T#71 or 71; operators type a Cyrillic Т as often as a Latin T.</summary>
+    internal static int? SlotNumber(string? recorded)
+    {
+        string raw = recorded?.Trim() ?? "";
+        if (raw.Length > 0 && raw[0] is 'T' or 't' or 'Т' or 'т') raw = raw[1..];
+        raw = raw.TrimStart('#').Trim();
+        return int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
     }
 
     private static readonly NumberFormatInfo SheetNumbers = new() { NumberDecimalSeparator = "," };
