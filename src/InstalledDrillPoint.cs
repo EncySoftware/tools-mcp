@@ -9,10 +9,11 @@ internal static class InstalledDrillPoint
                name.Equals("DrillMill", StringComparison.OrdinalIgnoreCase);
     }
 
-    // The ENCY drill template stores Angle in degrees. Read only keys advertised by this component.
+    // The ENCY drill template stores Angle in degrees, 120° when a kit set none: the catalogue's SIG or Point angle
+    // comes first. Read only keys advertised by this component.
     internal static double? ReadAngle(IReadOnlyList<string> keys, Func<string, double> read)
     {
-        foreach (string alias in new[] { "Angle", "SIG", "Point angle" })
+        foreach (string alias in new[] { "SIG", "Point angle", "Angle" })
         {
             string? key = keys.FirstOrDefault(k => k.Equals(alias, StringComparison.OrdinalIgnoreCase));
             if (key == null) continue;
@@ -21,6 +22,10 @@ internal static class InstalledDrillPoint
         }
         return null;
     }
+
+    /// <summary>ENCY's drill template answers half the overall length as the working length when a kit gave none.</summary>
+    internal static bool TemplateReach(double workingLength, double length) =>
+        double.IsFinite(length) && length > 0 && Math.Abs(workingLength - length / 2) <= 1e-6;
 
     internal static bool ValidAngle(double? degrees) => degrees is > 0 and <= 180;
 

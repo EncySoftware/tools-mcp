@@ -60,7 +60,7 @@ internal static partial class EncyIpc
     }
 
     private sealed record Installed(string ID,string Identity,string Caption,string Type,double DiameterMm,double ReachMm,
-        double? Angle,string Magazine,int Position,bool Node, IReadOnlyList<string>? Adapters = null);
+        double? Angle,string Magazine,int Position,bool Node, IReadOnlyList<string>? Adapters = null, bool ReachVerified = true);
     private static List<Installed> Inventory(Handle project,double scale, Func<double, bool> needsAngle, bool includeIncomplete = false) {
         var result=new List<Installed>();
         Handle? machine=null;
@@ -86,11 +86,24 @@ internal static partial class EncyIpc
                             // Optional geometry: the tool remains available for tip-referenced searches.
                         }
                     }
+                    double working = Convert.ToDouble(component.Call("GetWorkingLength",[]).Value);
+                    // a kit that gave no usable length leaves ENCY's template value, half the overall length: not the drill's reach
+                    bool reachVerified = true;
+                    if (InstalledDrillPoint.IsStandardDrill(toolType) && component.Type.GetMethod("GetParameters") != null &&
+                        component.Type.GetMethod("GetParameter") != null) {
+                        try {
+                            string? lengthKey = component.Strings("GetParameters").FirstOrDefault(k => k.Equals("Length", StringComparison.OrdinalIgnoreCase));
+                            if (lengthKey != null)
+                                reachVerified = !InstalledDrillPoint.TemplateReach(working, Convert.ToDouble(component.Call("GetParameter", [lengthKey]).Value));
+                        } catch (Exception e) when (e is InvalidOperationException or TargetInvocationException or System.Runtime.InteropServices.COMException) {
+                            // the reach stays as ENCY reports it
+                        }
+                    }
                     result.Add(new Installed(node.Count("get_NodeID").ToString(CultureInfo.InvariantCulture),
                         Convert.ToString(component.Call("get_ID",[]).Value,CultureInfo.InvariantCulture)??"",node.Text("GetCaption"),toolType,
-                        diameter,Convert.ToDouble(component.Call("GetWorkingLength",[]).Value),
+                        diameter,working,
                         angle,mag.Text("GetName"),node.Count("GetPosition"),true,
-                        includeIncomplete ? Optional(() => node.Strings("GetAdapters")) : null));
+                        includeIncomplete ? Optional(() => node.Strings("GetAdapters")) : null, reachVerified));
                 }
             }
             if (!includeIncomplete) return result;
@@ -142,7 +155,7 @@ internal static partial class EncyIpc
             var shape=t.Type.Split('.').Last();
             if(!(t.DiameterMm>0 && t.ReachMm>0))return false;
             if(mill)return shape.Equals("EndMill",StringComparison.OrdinalIgnoreCase) && t.DiameterMm<=width && (radius==null||t.DiameterMm<=2*radius)&&t.ReachMm>=depth;
-            if(!InstalledDrillPoint.IsStandardDrill(t.Type)||Math.Abs(t.DiameterMm-width)>1e-7)return false;
+            if(!InstalledDrillPoint.IsStandardDrill(t.Type)||Math.Abs(t.DiameterMm-width)>1e-7||!t.ReachVerified)return false;
             return t.ReachMm >= Required(t);
         }).ToList();
         if(args[0]=="machine-fit"){
@@ -161,10 +174,15 @@ internal static partial class EncyIpc
             };
             var unverified = inventory.Where(t => mode is ("through" or "cylinder") &&
                 InstalledDrillPoint.IsStandardDrill(t.Type) && Math.Abs(t.DiameterMm-width) <= 1e-7 && t.ReachMm >= depth + extra &&
-                !InstalledDrillPoint.ValidAngle(t.Angle)).Select(t => new {
+                t.ReachVerified && !InstalledDrillPoint.ValidAngle(t.Angle)).Select(t => new {
                     t.ID, t.Identity, t.Caption, t.Position, t.Magazine, t.DiameterMm, t.ReachMm,
                     reasonCode = "missingPointAngle", reason = "The installed drill's point angle is unknown."
-                });
+                }).Concat(inventory.Where(t => !mill && !t.ReachVerified && InstalledDrillPoint.IsStandardDrill(t.Type) &&
+                    Math.Abs(t.DiameterMm-width) <= 1e-7).Select(t => new {
+                    t.ID, t.Identity, t.Caption, t.Position, t.Magazine, t.DiameterMm, t.ReachMm,
+                    reasonCode = "templateWorkingLength",
+                    reason = "The installed drill's working length is ENCY's template value (half the overall length), not its usable length."
+                }));
             Console.WriteLine(JsonSerializer.Serialize(new{projectPath=path,operationId=id,installed,assignedTool,unverified}));
             return 0;
         }

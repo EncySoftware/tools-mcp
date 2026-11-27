@@ -12,7 +12,7 @@ internal static partial class EncyIpc
         string.Equals(Path.GetFullPath(first),Path.GetFullPath(second),StringComparison.OrdinalIgnoreCase);
 
     private static ToolBinding Binding(Installed t) => new(t.ID,t.Identity,t.Node?"machineMagazine":"projectToolList",
-        t.Caption,t.Type,t.Magazine,t.Position,PositiveMm(t.DiameterMm),PositiveMm(t.ReachMm),
+        t.Caption,t.Type,t.Magazine,t.Position,PositiveMm(t.DiameterMm),t.ReachVerified ? PositiveMm(t.ReachMm) : null,
         InstalledDrillPoint.ValidAngle(t.Angle)?t.Angle:null,t.Adapters);
 
     private static string? GeometryConflict(ProjectToolChange c, OperationSnapshot s, ToolBinding target)

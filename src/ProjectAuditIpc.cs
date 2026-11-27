@@ -155,7 +155,7 @@ internal static partial class EncyIpc
         bool NeedsDrillAngle(double d) => forPlanning || drillingDiameters.Any(required => Math.Abs(d-required) <= 1e-7);
         var inventory = Inventory(project,scale,NeedsDrillAngle,includeIncomplete:true);
         AuditCutter Describe(Installed t) => new(t.ID,t.Caption,t.Type,PositiveMm(t.DiameterMm),
-            PositiveMm(t.ReachMm),InstalledDrillPoint.ValidAngle(t.Angle) ? t.Angle : null,
+            t.ReachVerified ? PositiveMm(t.ReachMm) : null,InstalledDrillPoint.ValidAngle(t.Angle) ? t.Angle : null,
             t.Magazine,t.Position,t.Node ? "machineMagazine" : "projectToolList",t.Adapters,
             !InstalledDrillPoint.IsStandardDrill(t.Type) ? null : InstalledDrillPoint.ValidAngle(t.Angle) ? "known" :
                 t.Node && !NeedsDrillAngle(t.DiameterMm) ? "notRead" : "unavailable", t.Identity);

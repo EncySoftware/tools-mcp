@@ -26,4 +26,21 @@ public class InstalledDrillPointTests
         foreach (var missing in new double?[] { null, 0, -1, 181, double.NaN, double.PositiveInfinity })
             Assert.Null(InstalledDrillPoint.RequiredDepth(10, 40, 1, missing));
     }
+
+    [Fact]
+    public void ACataloguePointAngleWinsOverTheTemplatesAngle()
+    {
+        // ENCY's drill template always has Angle (120° unless the kit set one); SIG and Point angle come from the catalogue
+        Assert.Equal(140, InstalledDrillPoint.ReadAngle(["Angle", "SIG"], k => k == "SIG" ? 140 : 120));
+        Assert.Equal(135, InstalledDrillPoint.ReadAngle(["Angle", "Point angle"], k => k == "Point angle" ? 135 : 120));
+        Assert.Equal(118, InstalledDrillPoint.ReadAngle(["Angle"], _ => 118));
+    }
+
+    [Fact]
+    public void HalfTheOverallLengthIsTheTemplatesWorkingLengthNotTheDrills()
+    {
+        Assert.True(InstalledDrillPoint.TemplateReach(40, 80));
+        Assert.False(InstalledDrillPoint.TemplateReach(29, 80));
+        Assert.False(InstalledDrillPoint.TemplateReach(40, 0));
+    }
 }
