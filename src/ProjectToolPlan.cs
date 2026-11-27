@@ -97,6 +97,14 @@ internal static class ProjectToolPlan
             row.Questions.AddRange(issues);
             if (failure != null || issues.Count > 0 || b.Operation=="pocket") continue;
             var magazine = input?.Magazine ?? op.AssignedTool?.Magazine;
+            if (string.IsNullOrWhiteSpace(magazine))
+            {
+                // an operation with no tool yet names no magazine: one magazine needs no question, several do
+                var magazines = audit.ProjectInventory.Where(t => t.Source == "machineMagazine" && !string.IsNullOrWhiteSpace(t.Magazine))
+                    .Select(t => t.Magazine).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (magazines.Count == 1) magazine = magazines[0];
+                else if (magazines.Count > 1) row.Questions.Add("magazine");
+            }
             foreach (var tool in audit.ProjectInventory)
             {
                 if (string.IsNullOrWhiteSpace(tool.Identity) || tool.Source == "machineMagazine" &&

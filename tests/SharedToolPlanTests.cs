@@ -76,4 +76,17 @@ public class SharedToolPlanTests
         Assert.Empty(rows[0].Hits);
         Assert.Contains("square end mill",rows[0].Error);
     }
+
+    [Fact] public void AnOperationWithoutAToolUsesTheOnlyMagazineOrAsksWhichOne()
+    {
+        var drill=new AuditCutter("42","D10","Drill",10,48,118,"AxisS",2,"machineMagazine",Identity:"guid");
+        var review=new GeometryReview("needsInput",["assignedTool"],[],[new(10,40,"through",false,2)]);
+        var op=new ProjectAuditRow("one","Drill","HoleMachiningOp",null,null,null,review,Machine:"MX");
+        var single=ProjectToolPlan.Rows(new AuditReport(1,"test.stcp","metric",0,[op],[drill],[]),new Dictionary<string,ProjectPlanGeometry>());
+        Assert.Equal("42",Assert.Single(single[0].Hits).Key.ToolId);
+        var turret=drill with {Id="43",Magazine="Turret",Identity="guid2"};
+        var two=ProjectToolPlan.Rows(new AuditReport(1,"test.stcp","metric",0,[op],[drill,turret],[]),new Dictionary<string,ProjectPlanGeometry>());
+        Assert.Contains("magazine",two[0].Questions);
+        Assert.Empty(two[0].Hits);
+    }
 }
