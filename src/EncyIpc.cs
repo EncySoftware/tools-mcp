@@ -276,7 +276,7 @@ internal static partial class EncyIpc
 
     private sealed record Handle(object? Value, Type Type)
     {
-        public (object? Value, Type Type) Call(string name, object?[] args)
+        public (object? Value, Type Type) Call(string name, object?[] args, int timeoutMs = 120000)
         {
             var method = Type.GetMethod(name) ?? throw new NotSupportedException($"Installed ENCY does not expose {Type.Name}.{name}. Update ENCY to use the machine-tool API.");
             var pars = method.GetParameters();
@@ -286,7 +286,7 @@ internal static partial class EncyIpc
                 var context = Activator.CreateInstance(pars[^1].ParameterType.GetElementType()!)!;
                 var field = context.GetType().GetField("ExecuteSettings")!;
                 var settings = field.GetValue(context)!;
-                settings.GetType().GetField("Timeout")!.SetValue(settings, 120000);
+                settings.GetType().GetField("Timeout")!.SetValue(settings, timeoutMs);
                 field.SetValue(context, settings);
                 args = [.. args, context];
             }

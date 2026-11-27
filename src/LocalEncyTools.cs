@@ -266,6 +266,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
             foreach (var value in arguments) start.ArgumentList.Add(value);
             if (operation=="tool-plan" && arguments[0]=="apply" && input!=null)
                 return await LiveBatchWorker.Run(start,input,cancellationToken);
+            if (operation == "assembly-simulation") SimulationScratch.Sweep(Path.GetTempPath(), DateTime.UtcNow, TimeSpan.FromHours(1));
             using var worker = Process.Start(start) ?? throw new InvalidOperationException("Could not start ENCY IPC.");
             var stdout = worker.StandardOutput.ReadToEndAsync();
             var stderr = worker.StandardError.ReadToEndAsync();

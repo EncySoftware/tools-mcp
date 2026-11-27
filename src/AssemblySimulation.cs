@@ -28,6 +28,7 @@ internal sealed record SimulationEvidence(bool CachedToolpathCleared,bool Cached
 internal static partial class EncyIpc
 {
     private sealed record SimulationOp(Handle Operation,string Id,string Name,ToolBinding? Tool);
+    private const int LongCall = 13 * 60 * 1000;
 
     private static Dictionary<Guid,SimulationOp> SimulationOperations(Handle project,AssemblyLoadContext runtime,double scale)
     {
@@ -78,7 +79,7 @@ internal static partial class EncyIpc
             throw new ArgumentException("Specify a saved ENCY .stcp or .stc project.");
         if(helper.Type.GetMethod("RunNewConsoleApp")==null)
             throw new NotSupportedException("This ENCY SDK cannot simulate an isolated project copy.");
-        var scratch=Directory.CreateTempSubdirectory("ency-mcp-simulation-");
+        var scratch=Directory.CreateTempSubdirectory(SimulationScratch.Prefix);
         try {
             string copy=Path.Combine(scratch.FullName,"snapshot"+extension);
             if(!SameProjectPath(app.Object("GetActiveProject").Text("GetFilePath"),path))
@@ -131,10 +132,11 @@ internal static partial class EncyIpc
                 tech.Call("ResetAllOperationsToolpath",[]);sim.Call("ResetSimulationResults",[]);
                 var cleared=wanted.ToDictionary(id=>id,id=>(Path:copied[id].Operation.Count("GetCalculated")==0,
                                                            Sim:copied[id].Operation.Count("GetSimulated")==0));
-                tech.Call("CalculateAllOperationsToolpath",[true]);
+                // a large project takes minutes: these two calls wait up to 13, inside the 15-minute limit of the simulation
+                tech.Call("CalculateAllOperationsToolpath",[true],LongCall);
                 var mode=worker.Type.GetMethod("SetMainWorkMode")!.GetParameters()[0].ParameterType;
                 worker.Call("SetMainWorkMode",[Enum.Parse(mode,"mwmSimulating")]);
-                sim.Call("FastSimulateAllOperations",[]);
+                sim.Call("FastSimulateAllOperations",[],LongCall);
                 var rows=wanted.Select(id=>{
                     var row=copied[id];var op=row.Operation;
                     var errors=new List<string>();
