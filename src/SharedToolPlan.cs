@@ -152,8 +152,12 @@ internal static class SharedToolPlan
                         row.Hits.Add(new(key, label ?? name, (double?)fit["reachMm"], (double?)fit["requiredMm"], (string?)fit["reason"]));
                     }
                     foreach (var shelf in fit["assemblies"] as JsonArray ?? [])
-                        if (string.IsNullOrWhiteSpace(b.Spindle) || (string?)shelf!["mountStatus"] == "compatible")
-                            Add("warehouseAssembly", (string?)shelf!["assemblyId"], (string?)shelf["libraryId"], (string?)shelf["name"]);
+                    {
+                        // a saved assembly mounts on one spindle: with the spindle unknown its shank could be any
+                        if (string.IsNullOrWhiteSpace(b.Spindle)) { if (!row.Questions.Contains("spindle")) row.Questions.Add("spindle"); continue; }
+                        if ((string?)shelf!["mountStatus"] == "compatible")
+                            Add("warehouseAssembly", (string?)shelf["assemblyId"], (string?)shelf["libraryId"], (string?)shelf["name"]);
+                    }
                     Add("catalogue");
                 }
                 int? next;

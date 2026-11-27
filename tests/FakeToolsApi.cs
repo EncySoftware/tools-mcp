@@ -11,7 +11,9 @@ internal sealed class FakeToolsApi : IToolsApi
     public Task<System.Text.Json.Nodes.JsonObject> SavePersonalCutting(string id,PersonalCuttingInput input,string token)
     { Saw(nameof(SavePersonalCutting),token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
     public Task<System.Text.Json.Nodes.JsonObject> FindOperationTools(OperationBrief brief, string token)
-    { Saw(nameof(FindOperationTools), token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
+    { Saw(nameof(FindOperationTools), token); return Task.FromResult(OperationAnswer?.DeepClone().AsObject() ?? new System.Text.Json.Nodes.JsonObject()); }
+    /** What find_tools_for_operation answers, when a test sets it. */
+    public System.Text.Json.Nodes.JsonObject? OperationAnswer { get; set; }
     public Task<System.Text.Json.Nodes.JsonObject> FindDrills(double diameterMm, double depthMm, string bottom, double breakthroughMm, string material, int page, int size, string token, string? spindle = null)
     { Saw(nameof(FindDrills), token); return Task.FromResult(new System.Text.Json.Nodes.JsonObject()); }
     public Task<System.Text.Json.Nodes.JsonObject> FindMills(string operation,double widthMm,double depthMm,double? innerRadiusMm,string material,string? spindle,int page,int size,string token)

@@ -89,4 +89,18 @@ public class SharedToolPlanTests
         Assert.Contains("magazine",two[0].Questions);
         Assert.Empty(two[0].Hits);
     }
+
+    [Fact] public async Task WithoutTheSpindleNoSavedAssemblyIsOfferedAndTheSpindleIsAsked()
+    {
+        var api=new FakeToolsApi { OperationAnswer=System.Text.Json.Nodes.JsonNode.Parse("""
+            {"status":"ready","matches":{"items":[{"id":"c1","name":"Drill 10"}],"hasMore":false,"fits":{"c1":{"reachMm":50,"requiredMm":43,"reason":"fits",
+             "assemblies":[{"libraryId":"L","assemblyId":"A","name":"BT40 holder","mountStatus":"unknown"}]}}}}
+            """)!.AsObject() };
+        var row=new PlanRow(new PlanStep("one",new OperationBrief(Operation:"drilling",Diameter:10,Depth:40,Bottom:"through"),"MX"));
+        await SharedToolPlan.AddCatalogue([row],api,"token",1);
+        // a saved assembly mounts on one spindle: with the spindle unknown its shank could be any
+        Assert.DoesNotContain(row.Hits,h=>h.Key.Source=="warehouseAssembly");
+        Assert.Contains(row.Hits,h=>h.Key.Source=="catalogue");
+        Assert.Contains("spindle",row.Questions);
+    }
 }
