@@ -138,7 +138,7 @@ public class ToolsApiTests
         var stub = new StubHandler().OnContent("POST", "/api/pull", () => body);
         var api = new ToolsApi(new HttpClient(stub), "https://tools.test/api") { MaxFile = MB };
 
-        var e = await Assert.ThrowsAsync<DownloadStore.FullException>(() => api.BuildKit("Mills", ["c1"], [], null, "t"));
+        var e = await Assert.ThrowsAsync<DownloadStore.FullException>(() => api.BuildKit("Mills", ["c1"], [], "t"));
 
         Assert.Equal("a file holds at most 1 MB", e.Message);
         Assert.False(body.WasRead);
@@ -152,10 +152,26 @@ public class ToolsApiTests
         var stub = new StubHandler().OnContent("POST", "/api/pull", () => body);
         var api = new ToolsApi(new HttpClient(stub), "https://tools.test/api") { MaxFile = MB };
 
-        var e = await Assert.ThrowsAsync<DownloadStore.FullException>(() => api.BuildKit("Mills", ["c1"], [], null, "t"));
+        var e = await Assert.ThrowsAsync<DownloadStore.FullException>(() => api.BuildKit("Mills", ["c1"], [], "t"));
 
         Assert.Equal("a file holds at most 1 MB", e.Message);
         Assert.True(body.Given <= MB + 128 * 1024, $"read {body.Given} bytes");
+    }
+
+    /** A kit is asked for as its index version writes it: the request names no socket shape, the site no longer reads one. */
+    [Fact]
+    public async Task AKitIsAskedForWithoutASocketShape()
+    {
+        var stub = new StubHandler()
+            .On("POST", "/api/pull", HttpStatusCode.OK, "kit", "attachment; filename=\"Mills.mKit\"", "application/octet-stream")
+            .On("POST", "/api/me/libraries/L1/pull", HttpStatusCode.OK, "kit", "attachment; filename=\"L.mKit\"", "application/octet-stream");
+        var api = StubHandler.Api(stub);
+
+        await api.BuildKit("Mills", ["c1"], [], "t");
+        await api.ExportLibrary("L1", "t");
+
+        Assert.Equal(2, stub.Requests.Count);
+        Assert.All(stub.Requests, r => Assert.DoesNotContain("sockets", r.Body ?? "", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -166,7 +182,7 @@ public class ToolsApiTests
             .OnContent("GET", "/api/kits/mills/download", () => new Unsized(3000));
         var api = new ToolsApi(new HttpClient(stub), "https://tools.test/api") { MaxFile = MB };
 
-        Assert.Equal(Enumerable.Range(0, 1000).Select(i => (byte)i), (await api.BuildKit("Mills", ["c1"], [], null, "t")).Bytes);
+        Assert.Equal(Enumerable.Range(0, 1000).Select(i => (byte)i), (await api.BuildKit("Mills", ["c1"], [], "t")).Bytes);
         Assert.Equal(3000, (await api.DownloadKit("mills", "t")).Bytes.Length);
     }
 
@@ -254,7 +270,7 @@ public class ToolsApiTests
         var stub = new StubHandler().On("POST", "/api/me/libraries/L1/pull", HttpStatusCode.OK, "kit-bytes",
             "attachment; filename*=UTF-8''%D0%A2%D0%BE%D0%BA%D0%B0%D1%80%D0%BA%D0%B0.mKit", "application/octet-stream");
 
-        var file = await StubHandler.Api(stub).ExportLibrary("L1", null, "t");
+        var file = await StubHandler.Api(stub).ExportLibrary("L1", "t");
 
         Assert.Equal("Токарка.mKit", file.FileName);
         Assert.Equal("kit-bytes"u8.ToArray(), file.Bytes);

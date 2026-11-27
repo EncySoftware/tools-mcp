@@ -58,17 +58,14 @@ public class BuildTools(IToolsApi api, TokenProvider tokens, IFileSink? files = 
         [Description("The kit's name")] string name,
         [Description("The components' ids, from find_components")] string[] componentIds,
         [Description("Custom drills and end mills to add")] CustomToolInput[]? customTools = null,
-        [Description("Leave empty for released ENCY; \"list\" for ENCY builds after 1 September 2026")] string? socketShape = null,
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
             _files.Check(folder);
-            string? shape = SocketShape(socketShape);
-            if (SocketShapeError(shape) is { } refused) return refused;
             var (ids, bad) = Ids.All(componentIds);
             if (bad != null) return Ids.NotAComponent(bad);
             var custom = (customTools ?? []).Select(t => t.ToCustomTool()).ToList();
-            var file = await api.BuildKit(name, ids, custom, shape, token);
+            var file = await api.BuildKit(name, ids, custom, token);
             return $"{_files.Deliver(file, folder)} - {ids.Count} components and {custom.Count} custom tools. "
                    + ImportHint;
         });
@@ -126,15 +123,4 @@ public class BuildTools(IToolsApi api, TokenProvider tokens, IFileSink? files = 
             var file = await api.BuildCustomTool(tool, token);
             return $"{_files.Deliver(file, folder)}. " + ImportHint;
         });
-
-    /**
-     * ENCY changed on 1 September 2026 how a socket names its connections - a list rather than one - and each build
-     * refuses the other's shape. Empty - null, or "" as an agent passes it - keeps what every released ENCY reads.
-     */
-    internal static string? SocketShape(string? raw) => string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
-
-    internal static string? SocketShapeError(string? socketShape) =>
-        socketShape is null or "list"
-            ? null
-            : "ERROR: socketShape is empty (released ENCY) or \"list\" (ENCY builds after 1 September 2026)";
 }

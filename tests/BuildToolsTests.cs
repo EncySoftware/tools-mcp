@@ -27,16 +27,18 @@ public class BuildToolsTests : IDisposable
         Assert.Equal(new CustomTool("drill", 7.3, 90), _api.LastBuild.Value.Custom.Single());
     }
 
-    /** ENCY changed how a socket names its connections on 1 September 2026; each build refuses the other's shape. */
+    /**
+     * A socket's connections as a list, under the version 3 the site's kits declare, made two formats in one kit: on
+     * 13.11 (SA-12) the nightly ENCY refused such a kit and every library with it. The site writes the one shape the
+     * version names, so the tools offer no other.
+     */
     [Fact]
-    public async Task TheSocketShapeIsListOrNothing()
+    public void NoKitToolOffersASocketShape()
     {
-        Assert.Equal("ERROR: socketShape is empty (released ENCY) or \"list\" (ENCY builds after 1 September 2026)",
-            await Tools().BuildKit("Kit", [G("c1")], socketShape: "tree", folder: _folder));
-        Assert.False(_api.Called(nameof(IToolsApi.BuildKit)));
-
-        await Tools().BuildKit("Kit", [G("c1")], socketShape: "list", folder: _folder);
-        Assert.Equal("list", _api.LastBuild!.Value.Sockets);
+        Assert.DoesNotContain(typeof(BuildTools).GetMethod(nameof(BuildTools.BuildKit))!.GetParameters(),
+            p => p.Name == "socketShape");
+        Assert.DoesNotContain(typeof(LibraryTools).GetMethod(nameof(LibraryTools.ExportLibrary))!.GetParameters(),
+            p => p.Name == "socketShape");
     }
 
     [Fact]
@@ -55,14 +57,6 @@ public class BuildToolsTests : IDisposable
 
         Assert.Equal("Saved: " + Path.Combine(_folder, "7.5mm Drill.mKit") + ". Import it into ENCY's tool library.", reply);
         Assert.Equal(new CustomTool("drill", 7.5, 60), _api.LastCustomTool);
-    }
-
-    /** "Leave empty", the description says - and an agent passes "" for an empty string. */
-    [Fact]
-    public async Task AnEmptySocketShapeIsWhatReleasedEncyReads()
-    {
-        Assert.StartsWith("Saved:", await Tools().BuildKit("Kit", [G("c1")], socketShape: "", folder: _folder));
-        Assert.Null(_api.LastBuild!.Value.Sockets);
     }
 
     /** The picks as GTC, for a system that reads it; what has no place in GTC is counted, not silently dropped. */

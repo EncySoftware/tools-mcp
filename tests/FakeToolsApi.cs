@@ -160,14 +160,14 @@ internal sealed class FakeToolsApi : IToolsApi
     }
 
     // ------------------------------------------------------------------ builds
-    public (string Name, IReadOnlyList<string> Ids, IReadOnlyList<CustomTool> Custom, string? Sockets)? LastBuild { get; private set; }
+    public (string Name, IReadOnlyList<string> Ids, IReadOnlyList<CustomTool> Custom)? LastBuild { get; private set; }
     public CustomTool? LastCustomTool { get; private set; }
 
     public Task<DownloadedFile> BuildKit(string name, IReadOnlyList<string> ids, IReadOnlyList<CustomTool> custom,
-                                        string? sockets, string token)
+                                        string token)
     {
         Saw(nameof(BuildKit), token);
-        LastBuild = (name, ids, custom, sockets);
+        LastBuild = (name, ids, custom);
         return Task.FromResult(new DownloadedFile(name + ".mKit", [1, 2, 3]));
     }
 
@@ -277,10 +277,10 @@ internal sealed class FakeToolsApi : IToolsApi
         return Task.FromResult(new DownloadedFile("T15.sc12tool", [42]));
     }
 
-    public Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token)
+    public Task<DownloadedFile> ExportLibrary(string id, string token)
     {
         Saw(nameof(ExportLibrary), token);
-        LastBuild = (Libraries[id].Name, [], [], sockets);
+        LastBuild = (Libraries[id].Name, [], []);
         return Task.FromResult(new DownloadedFile(Libraries[id].Name + ".mKit", [9]));
     }
 

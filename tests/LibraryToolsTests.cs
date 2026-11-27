@@ -129,7 +129,6 @@ public class LibraryToolsTests : IDisposable
         string reply = await Tools().ExportLibrary(G("L1"), folder: _folder);
 
         Assert.Contains("Saved: " + Path.Combine(_folder, "Turning.mKit"), reply);
-        Assert.StartsWith("ERROR: socketShape", await Tools().ExportLibrary(G("L1"), socketShape: "tree", folder: _folder));
     }
 
     [Fact]

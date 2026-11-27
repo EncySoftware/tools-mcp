@@ -106,7 +106,7 @@ public interface IToolsApi
     Task<AssemblyChain?> GetAssembly(string id, string? spindle, string token);
     Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetAcceptsAmong(IReadOnlyList<string> ids, string token);
     Task<DownloadedFile?> GetComponentFile(string id, ComponentFileKind kind, string token);
-    Task<DownloadedFile> BuildKit(string name, IReadOnlyList<string> ids, IReadOnlyList<CustomTool> custom, string? sockets, string token);
+    Task<DownloadedFile> BuildKit(string name, IReadOnlyList<string> ids, IReadOnlyList<CustomTool> custom, string token);
     Task<GtcPackage> BuildGtcPackage(string name, IReadOnlyList<string> ids, string token);
     Task<DownloadedFile> BuildCustomTool(CustomTool spec, string token);
     Task<IReadOnlyList<LibrarySummary>> ListLibraries(string token);
@@ -118,7 +118,7 @@ public interface IToolsApi
     Task<Library> RemoveFromLibrary(string id, IReadOnlyList<LibraryEntry> items, string token);
     Task<Library> RenameLibrary(string id, string name, string token);
     Task DeleteLibrary(string id, string token);
-    Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token);
+    Task<DownloadedFile> ExportLibrary(string id, string token);
     Task<ToolListExport> ExportToolList(string id, string token);
     Task<Library> UpdateAssembly(string library, string assembly, AssemblyPatch patch, string token);
     Task<DownloadedFile> ExportAssembly(string library, string assembly, string token);
@@ -240,8 +240,8 @@ public class ToolsApi : IToolsApi
     }
 
     public async Task<DownloadedFile> BuildKit(string name, IReadOnlyList<string> ids, IReadOnlyList<CustomTool> custom,
-                                              string? sockets, string token) =>
-        await FileOf(await SendForFile(HttpMethod.Post, "/pull", token, new { name, ids, sockets, custom }), name + ".mKit");
+                                              string token) =>
+        await FileOf(await SendForFile(HttpMethod.Post, "/pull", token, new { name, ids, custom }), name + ".mKit");
 
     /** The count comes as X-Left-Out, read before FileOf lets the answer go. */
     public async Task<GtcPackage> BuildGtcPackage(string name, IReadOnlyList<string> ids, string token)
@@ -281,8 +281,8 @@ public class ToolsApi : IToolsApi
     public async Task DeleteLibrary(string id, string token) =>
         await EnsureOk(await Send(HttpMethod.Delete, "/me/libraries/" + Esc(id), token));
 
-    public async Task<DownloadedFile> ExportLibrary(string id, string? sockets, string token) =>
-        await FileOf(await SendForFile(HttpMethod.Post, "/me/libraries/" + Esc(id) + "/pull", token, new { sockets }), "Library.mKit");
+    public async Task<DownloadedFile> ExportLibrary(string id, string token) =>
+        await FileOf(await SendForFile(HttpMethod.Post, "/me/libraries/" + Esc(id) + "/pull", token, new { }), "Library.mKit");
 
     public async Task<ToolListExport> ExportToolList(string id, string token)
     {

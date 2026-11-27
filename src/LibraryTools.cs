@@ -259,15 +259,12 @@ public class LibraryTools(IToolsApi api, TokenProvider tokens, IFileSink? files 
         "library in ENCY through the extension.")]
     public Task<string> ExportLibrary(
         [Description("The library's id")] string id,
-        [Description("Leave empty for released ENCY; \"list\" for ENCY builds after 1 September 2026")] string? socketShape = null,
         [Description("Folder to save into; by default Downloads\\ENCY tools")] string? folder = null) =>
         Replies.WithToken(tokens, async token =>
         {
             _files.Check(folder);
             if (Ids.Of(id) is not { } lid) return Ids.NotALibrary(id);
-            string? shape = BuildTools.SocketShape(socketShape);
-            if (BuildTools.SocketShapeError(shape) is { } refused) return refused;
-            var file = await api.ExportLibrary(lid, shape, token);
+            var file = await api.ExportLibrary(lid, token);
             return $"{_files.Deliver(file, folder)}. " + BuildTools.ImportHint;
         });
 
