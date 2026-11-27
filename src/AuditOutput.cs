@@ -43,7 +43,8 @@ internal static class AuditOutput
     internal static byte[] SetupCsv(AuditReport report)
     {
         var text = new StringBuilder();
-        text.AppendLine("Machine,Setup,Operation,Operation ID,Assigned ID,Tool,Tool source,Magazine,T number,Adapters (tool to magazine),Diameter mm,Working reach mm,Required working reach mm,Point angle deg,Point angle state,Result,Reasons,Missing fields");
+        // a Russian Excel splits a sheet on ";" and reads numbers with a decimal comma
+        text.AppendLine("Machine;Setup;Operation;Operation ID;Assigned ID;Tool;Tool source;Magazine;T number;Adapters (tool to magazine);Diameter mm;Working reach mm;Required working reach mm;Point angle deg;Point angle state;Result;Reasons;Missing fields");
         foreach (var row in report.Operations)
         {
             var tool = row.AssignedTool;
@@ -53,12 +54,13 @@ internal static class AuditOutput
                 tool?.Name,tool?.Source,tool?.Magazine,tool?.Position.ToString(CultureInfo.InvariantCulture),
                 tool?.Adapters == null ? null : string.Join(" > ",tool.Adapters),Number(tool?.DiameterMm),Number(tool?.ReachMm),
                 Number(row.Review.RequiredReachMm),Number(tool?.PointAngleDegrees),tool?.PointAngleState,row.Review.Status,string.Join(" / ",reasons),string.Join(" / ",row.Review.Missing)];
-            text.AppendLine(string.Join(",", fields.Select(Cell)));
+            text.AppendLine(string.Join(";", fields.Select(Cell)));
         }
         return [..Encoding.UTF8.GetPreamble(), ..Encoding.UTF8.GetBytes(text.ToString())];
     }
 
-    private static string? Number(double? v) => v?.ToString("G12",CultureInfo.InvariantCulture);
+    private static readonly NumberFormatInfo SheetNumbers = new() { NumberDecimalSeparator = "," };
+    private static string? Number(double? v) => v?.ToString("G12",SheetNumbers);
 
     private static string Cell(string? value)
     {

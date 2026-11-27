@@ -61,6 +61,11 @@ public class ProjectToolAuditTests
         var fromIpc=System.Text.Json.JsonSerializer.Deserialize<AuditReport>(serialized,AuditOutput.Json)!;
         var text=System.Text.Encoding.UTF8.GetString(AuditOutput.SetupCsv(fromIpc));
         Assert.Contains("\"'=run(\"\"x,y\"\")\"",text);
-        Assert.Contains("\"machineMagazine\",\"Head\",\"71\"",text);
+        // a Russian Excel splits on ";" and reads a decimal comma; a decimal point could turn 10.5 into a date
+        Assert.StartsWith("Machine;Setup;Operation;",text.TrimStart('﻿'));
+        Assert.Contains("\"machineMagazine\";\"Head\";\"71\"",text);
+        Assert.DoesNotContain("\",\"",text);
+        var half=new AuditReport(1,"part.stcp","metric",0,[row with {AssignedTool=Drill() with {DiameterMm=10.5}}],[],[]);
+        Assert.Contains("\"10,5\"",System.Text.Encoding.UTF8.GetString(AuditOutput.SetupCsv(half)));
     }
 }
