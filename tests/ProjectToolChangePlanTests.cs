@@ -92,7 +92,9 @@ public class ProjectToolChangePlanTests
 
     [Fact] public void SimulationNeverReportsAStaleUnverifiedOrIncompleteResultAsClear() {
         var e=new SimulationEvidence(true,true,true,true,true,true,true,[]);
-        Assert.Equal("noErrorsReported",e.Status);
+        // ENCY's API simulates only fast, and fast simulation does not check holder or machine collisions
+        Assert.Equal("noErrorsReportedCollisionsUnchecked",e.Status);
+        Assert.False(e.CollisionsChecked);
         Assert.Equal("errorsDetected",(e with {Errors=["Holder"]}).Status);
         Assert.Equal("incomplete",(e with {Simulated=false}).Status);
         Assert.Equal("unverified",(e with {CachedToolpathCleared=false}).Status);

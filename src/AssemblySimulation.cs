@@ -18,8 +18,11 @@ internal sealed record SimulationRequest(string ProjectPath,string OperationUnit
 internal sealed record SimulationEvidence(bool CachedToolpathCleared,bool CachedSimulationCleared,bool Calculated,bool Simulated,
     bool AssemblyVerified,bool HolderChecks,bool MachineChecks, IReadOnlyList<string> Errors)
 {
+    /// <summary>ENCY's API simulates only fast, and its fast simulation does not compute holder or machine collisions.</summary>
+    public bool CollisionsChecked => false;
+
     public string Status => !CachedToolpathCleared || !CachedSimulationCleared || !AssemblyVerified || !HolderChecks || !MachineChecks
-        ? "unverified" : Errors.Count>0 ? "errorsDetected" : !Calculated || !Simulated ? "incomplete" : "noErrorsReported";
+        ? "unverified" : Errors.Count>0 ? "errorsDetected" : !Calculated || !Simulated ? "incomplete" : "noErrorsReportedCollisionsUnchecked";
 }
 
 internal static partial class EncyIpc
@@ -118,6 +121,10 @@ internal static partial class EncyIpc
                         throw new InvalidOperationException("Simulated copy did not confirm every requested tool.");
                 }
                 var tech=model.Object("GetTechnologist"); var sim=model.Object("get_Simulator");
+                // ENCY keeps these in the operator's own settings as soon as they change: put every one back afterwards
+                string[] switches=["CheckHolderCollisions","CheckMachineCollisions","BreakOnErrors","BreakOnEndOfOperation","BreakOnStopCommand"];
+                var operatorSettings=switches.ToDictionary(s=>s,s=>sim.Count("get_"+s)!=0);
+                try {
                 sim.Call("set_CheckHolderCollisions",[true]);sim.Call("set_CheckMachineCollisions",[true]);
                 sim.Call("set_BreakOnErrors",[false]);sim.Call("set_BreakOnEndOfOperation",[false]);sim.Call("set_BreakOnStopCommand",[false]);
                 bool holders=sim.Count("get_CheckHolderCollisions")!=0,machine=sim.Count("get_CheckMachineCollisions")!=0;
@@ -139,12 +146,15 @@ internal static partial class EncyIpc
                     return new {operationId=row.Id,operationName=row.Name,assignedTool=row.Tool,evidence};
                 }).ToList();
                 string assessment=rows.Any(r=>r.evidence.Status=="errorsDetected") ? "errorsDetected" :
-                    rows.All(r=>r.evidence.Status=="noErrorsReported") ? "noErrorsReported" : "verificationIncomplete";
-                Console.WriteLine(JsonSerializer.Serialize(new{status="complete",assessment,projectPath=path,source=request.SnapshotPath!=null?"providedSavedSnapshot":"savedProjectFile",
+                    rows.All(r=>r.evidence.Status=="noErrorsReportedCollisionsUnchecked") ? "noErrorsReportedCollisionsUnchecked" : "verificationIncomplete";
+                Console.WriteLine(JsonSerializer.Serialize(new{status="complete",assessment,
+                    collisionCheck="notPerformed: ENCY's API simulates only fast, and fast simulation does not check holder or machine collisions",
+                    projectPath=path,source=request.SnapshotPath!=null?"providedSavedSnapshot":"savedProjectFile",
                     sourcePath=source,sourceFileSha256=sha,sourceHadUnsavedChanges=modified,
                     previewId=plan?.PreviewId,changesReplayedInCopy=plan?.Outcomes,otherUnsavedEditsIncluded=false,
                     simulatedScope="entireProject",reportedOperations=rows},AuditOutput.Json));
                 return 0;
+                } finally { foreach(var (name,value) in operatorSettings) sim.Call("set_"+name,[value]); }
             } finally { WorkerCall(worker,"Close",false); }
         } finally { if(scratch.Exists) scratch.Delete(true); }
     }
