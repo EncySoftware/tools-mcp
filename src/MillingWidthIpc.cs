@@ -29,9 +29,21 @@ internal static partial class EncyIpc
         var edges = new List<RectangularOpening.Edge>();
         while (iter.Count("Next") != 0) {
             if (edges.Count == 4) return null;
-            var edge = iter.Object("Current").Object("get_Edge");
+            var coedge = iter.Object("Current");
+            var edge = coedge.Object("get_Edge");
+            // the edge's length may be its chord, so an arc would pass: its curve's end tangents tell a straight side
+            bool straight;
+            try {
+                var curve = coedge.Call("get_Geometry",[]);
+                if (curve.Value == null) return null;
+                var geometry = new Handle(curve.Value, curve.Type);
+                straight = RectangularOpening.Straight(Point(geometry.Call("get_StartPoint",[]).Value!), Point(geometry.Call("get_EndPoint",[]).Value!),
+                    Point(geometry.Call("get_StartTangent",[]).Value!), Point(geometry.Call("get_EndTangent",[]).Value!));
+            } catch (Exception e) when (e is NotSupportedException or InvalidOperationException or TargetInvocationException) {
+                return null; // no curve to prove the side straight: this face gives no verified width
+            }
             edges.Add(new(Point(edge.Call("get_StartPoint",[]).Value!), Point(edge.Call("get_EndPoint",[]).Value!),
-                Convert.ToDouble(edge.Call("get_Length",[]).Value, CultureInfo.InvariantCulture)));
+                Convert.ToDouble(edge.Call("get_Length",[]).Value, CultureInfo.InvariantCulture), straight));
         }
         var corners = RectangularOpening.ClosedRectangle(edges, normal, scale);
         if (corners == null) return null;

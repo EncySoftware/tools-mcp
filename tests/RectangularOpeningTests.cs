@@ -41,4 +41,26 @@ public class RectangularOpeningTests
         edges[1] = new(Tilted[3],new(10,16,6),4);
         Assert.Null(RectangularOpening.ClosedRectangle(edges,new(4,0,-3),1));
     }
+
+    [Fact]
+    public void AnEdgeWhoseEndsLeaveItsChordIsAnArc()
+    {
+        var x = new GeometryPoint(1, 0, 0);
+        Assert.True(RectangularOpening.Straight(new(0, 0, 0), new(40, 0, 0), x, x));
+        Assert.True(RectangularOpening.Straight(new(0, 0, 0), new(40, 0, 0), x * -1, x * -1));
+        Assert.False(RectangularOpening.Straight(new(0, 0, 0), new(40, 0, 0), new(1, 0.3, 0), new(1, -0.3, 0)));
+        Assert.False(RectangularOpening.Straight(new(0, 0, 0), new(40, 0, 0), new(0, 0, 0), x));
+    }
+
+    [Fact]
+    public void ASideThatIsAnArcIsNoRectangleWhateverLengthTheKernelGives()
+    {
+        // a 40 x 20 face whose long side bulges: its chord and its reported length agree, its tangents do not
+        GeometryPoint a = new(0, 0, 0), b = new(40, 0, 0), c = new(40, 20, 0), d = new(0, 20, 0);
+        var edges = new[] { new RectangularOpening.Edge(a, b, 40), new RectangularOpening.Edge(b, c, 20),
+            new RectangularOpening.Edge(c, d, 40), new RectangularOpening.Edge(d, a, 20) };
+        Assert.NotNull(RectangularOpening.ClosedRectangle(edges, new(0, 0, 1), 1));
+        edges[0] = edges[0] with { Straight = false };
+        Assert.Null(RectangularOpening.ClosedRectangle(edges, new(0, 0, 1), 1));
+    }
 }

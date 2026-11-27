@@ -11,7 +11,19 @@ internal readonly record struct GeometryPoint(double X, double Y, double Z)
 
 internal static class RectangularOpening
 {
-    internal readonly record struct Edge(GeometryPoint Start, GeometryPoint End, double Length);
+    internal readonly record struct Edge(GeometryPoint Start, GeometryPoint End, double Length, bool? Straight = null);
+
+    /// <summary>
+    /// A curve is straight when both its end tangents lie along its chord. The kernel's edge length cannot tell:
+    /// it may be the chord. Compare in the curve's own space, so a curve on a planar face's parameters works too.
+    /// </summary>
+    internal static bool Straight(GeometryPoint start, GeometryPoint end, GeometryPoint startTangent, GeometryPoint endTangent)
+    {
+        var chord = end - start;
+        bool Along(GeometryPoint t) => t.Length > 0 && double.IsFinite(t.Length) && chord.Length > 0 &&
+                                       t.Cross(chord).Length <= 1e-8 * t.Length * chord.Length;
+        return Along(startTangent) && Along(endTangent);
+    }
 
     internal static double? CurveWidthMm(IReadOnlyList<GeometryPoint> knots, bool closed, double perimeter,
         double unitToMm, GeometryPoint normal)
@@ -40,7 +52,7 @@ internal static class RectangularOpening
 
     internal static GeometryPoint[]? ClosedRectangle(IReadOnlyList<Edge> edges, GeometryPoint faceNormal, double scale)
     {
-        if (edges.Count != 4 || edges.Any(e => !(e.Length > 0) || !double.IsFinite(e.Length)) ||
+        if (edges.Count != 4 || edges.Any(e => !(e.Length > 0) || !double.IsFinite(e.Length) || e.Straight == false) ||
             !(scale > 0) || !double.IsFinite(scale)) return null;
         var ordered = new List<GeometryPoint> { edges[0].Start, edges[0].End };
         var remaining = edges.Skip(1).ToList();
