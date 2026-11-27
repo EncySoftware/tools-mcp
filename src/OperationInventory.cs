@@ -60,7 +60,8 @@ internal static partial class EncyIpc
     }
 
     private sealed record Installed(string ID,string Identity,string Caption,string Type,double DiameterMm,double ReachMm,
-        double? Angle,string Magazine,int Position,bool Node, IReadOnlyList<string>? Adapters = null, bool ReachVerified = true);
+        double? Angle,string Magazine,int Position,bool Node, IReadOnlyList<string>? Adapters = null, bool ReachVerified = true,
+        string? MagazineCaption = null);
     private static List<Installed> Inventory(Handle project,double scale, Func<double, bool> needsAngle, bool includeIncomplete = false) {
         var result=new List<Installed>();
         Handle? machine=null;
@@ -103,7 +104,9 @@ internal static partial class EncyIpc
                         Convert.ToString(component.Call("get_ID",[]).Value,CultureInfo.InvariantCulture)??"",node.Text("GetCaption"),toolType,
                         diameter,working,
                         angle,mag.Text("GetName"),node.Count("GetPosition"),true,
-                        includeIncomplete ? Optional(() => node.Strings("GetAdapters")) : null, reachVerified));
+                        includeIncomplete ? Optional(() => node.Strings("GetAdapters")) : null, reachVerified,
+                        // the magazine as ENCY's window names it, which is what a technologist writes as a place
+                        Optional(() => mag.Text("GetCaption"))));
                 }
             }
             if (!includeIncomplete) return result;

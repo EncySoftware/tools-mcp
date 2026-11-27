@@ -155,7 +155,7 @@ internal static partial class EncyIpc
             t.ReachVerified ? PositiveMm(t.ReachMm) : null,InstalledDrillPoint.ValidAngle(t.Angle) ? t.Angle : null,
             t.Magazine,t.Position,t.Node ? "machineMagazine" : "projectToolList",t.Adapters,
             !InstalledDrillPoint.IsStandardDrill(t.Type) ? null : InstalledDrillPoint.ValidAngle(t.Angle) ? "known" :
-                t.Node && !NeedsDrillAngle(t.DiameterMm) ? "notRead" : "unavailable", t.Identity);
+                t.Node && !NeedsDrillAngle(t.DiameterMm) ? "notRead" : "unavailable", t.Identity, t.MagazineCaption);
         var rows = new List<ProjectAuditRow>();
         foreach (var s in operations) {
             // Node IDs and legacy tool IDs occupy different namespaces; never match by T position.

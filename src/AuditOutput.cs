@@ -16,6 +16,8 @@ internal static class AuditOutput
     {
         static bool Equal(string? left, string? right) => !string.IsNullOrWhiteSpace(left) &&
             string.Equals(left.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+        // a place names the magazine by its caption, as ENCY's window shows it, or by its name
+        static bool InMagazine(string? place, AuditCutter t) => Equal(place, t.Magazine) || Equal(place, t.MagazineCaption);
         return library.Items.Select(entry => {
             var assembly = entry.Assembly;
             var part = assembly?.Parts.LastOrDefault() ?? entry;
@@ -23,13 +25,13 @@ internal static class AuditOutput
             bool numbered = slot != null;
             int number = slot ?? 0;
             var candidates = projectTools.Select(t => new ShelfCandidate(t, numbered && t.Position == number,
-                    Equal(assembly?.Place, t.Magazine),
+                    InMagazine(assembly?.Place, t),
                     Equal(part.Reference?.Article, t.Name) || Equal(part.Name, t.Name) || Equal(entry.Name, t.Name)))
                 .Where(c => c.SameNumber || c.SameLabel).ToArray();
             var slots = candidates.Where(c => c.SameNumber).ToArray();
             var scoped = slots.Where(c => c.SameMagazine).ToArray();
             bool knownMagazine = assembly?.Place != null && projectTools.Any(t =>
-                t.Source == "machineMagazine" && Equal(assembly.Place, t.Magazine));
+                t.Source == "machineMagazine" && InMagazine(assembly.Place, t));
             var possible = knownMagazine ? scoped : slots;
             string status = knownMagazine && numbered && scoped.Length == 0 && slots.Length > 0 ? "numberInAnotherMagazine" :
                 possible.Length > 1 ? "ambiguousPosition" :

@@ -53,6 +53,18 @@ public class ProjectToolAuditTests
         Assert.Equal("numberInAnotherMagazine",Assert.Single(AuditOutput.Compare(scoped,elsewhere)).Status);
     }
 
+    /// <summary>The place a technologist writes on the shelf is the magazine as ENCY's window names it, its caption.</summary>
+    [Fact] public void APlaceWrittenAsTheMagazineCaptionFindsThatMagazine()
+    {
+        var a=new LibraryAssembly("asm","T#71",null,[]) with {Place="Upper turret"};
+        var item=new LibraryItem(null,"10 mm drill",null,true,null,null,null,null,null,a);
+        var shelf=new Library("id","shelf",default,default,[item]);
+        var tools=new[]{Drill(mag:"Head") with {MagazineCaption="Lower turret"},Drill(mag:"Turret") with {MagazineCaption="Upper turret"}};
+        var compared=Assert.Single(AuditOutput.Compare(shelf,tools));
+        Assert.Equal("positionAndLabelAgree",compared.Status);
+        Assert.Equal("Turret",compared.Candidates.Single(c=>c.SameMagazine).ProjectTool.Magazine);
+    }
+
     [Fact] public void SetupSheetQuotesAndNeutralizesOperationNames()
     {
         var row=new ProjectAuditRow("op1","=run(\"x,y\")","drill",null,"71",Drill(),ProjectToolAudit.Drill([new(10,30,"tip")],Drill()));
