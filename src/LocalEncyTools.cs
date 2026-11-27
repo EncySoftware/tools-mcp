@@ -11,6 +11,11 @@ namespace ToolsMcp;
 [SupportedOSPlatform("windows")]
 public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
 {
+    /// <summary>Writing into the open project waits for the operator's own switch, as the batch apply does; previews still run.</summary>
+    internal static string? WritesOff() => LiveProjectChangeTools.Enabled ? null :
+        "ERROR: writing to the open ENCY project is disabled. Use the read-only tools and previews; the operator enables writes locally with " +
+        LiveProjectChangeTools.Setting + "=1.";
+
     [McpServerTool(Name = "list_project_tools", ReadOnly = true), Description(
         "Reads installed tools from the current ENCY machine magazines. Returns the ENCY process id, project path, magazine, actual T position and component caption. If several ENCY processes are open, choose a processId.")]
     public Task<string> ListProjectTools(int? processId = null) => Run("list", processId, []);
@@ -18,7 +23,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     [McpServerTool(Name = "import_project_gtc"), Description(
         "Installs a local GTC zip into the specified open ENCY project in advanced tools mode. Creates a component library, modifies the open project and reports installed tools and skipped reasons. Use list_project_tools to identify the target; never assume a shelf T number is its magazine position. Does not save the project.")]
     public Task<string> ImportProjectGtc(int processId, string projectPath, string packagePath, string? magazine = null)
-        => Run("import", processId, [projectPath, packagePath, magazine ?? ""]);
+        => WritesOff() is { } off ? Task.FromResult(off) : Run("import", processId, [projectPath, packagePath, magazine ?? ""]);
 
     [McpServerTool(Name = "list_tool_operations", ReadOnly = true), Description(
         "Shows the names and ids of operations that use a tool position in a specific magazine of the open ENCY project. Use the magazine name or caption and T number from list_project_tools.")]
@@ -33,7 +38,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     public Task<string> ApplyOperationCutting(string id, int condition, string boundary, string speedUnit,
         string feedUnit, int processId, string projectPath, string operationId, string operationUnits,
         CuttingPass? context=null,string? conditionKey=null,string? personalCorrectionId=null,bool previewOnly=false,bool acceptUnverified=false) =>
-        Replies.WithToken(tokens, async token =>
+        !previewOnly && WritesOff() is { } off ? Task.FromResult(off) : Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(id) is not { } cid) return Ids.NotAComponent(id);
             if (boundary is not ("minimum" or "maximum") || operationUnits is not ("metric" or "imperial"))
@@ -69,7 +74,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     [McpServerTool(Name = "install_shelf_in_project"), Description(
         "Imports a saved catalogue shelf into an open ENCY project in one call. Use a libraryId from list_libraries and the PID and exact project path from list_project_tools. Creates a component library, installs compatible tools, reports actual holders and positions. Does not save the project.")]
     public Task<string> InstallShelfInProject(string libraryId, int processId, string projectPath, string? magazine = null) =>
-        Replies.WithToken(tokens, async token =>
+        WritesOff() is { } off ? Task.FromResult(off) : Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(libraryId) is not { } id) return Ids.NotALibrary(libraryId);
             var shelf = await LibraryTools.BuildShelfGtc(api, id, token);
@@ -205,6 +210,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
     [McpServerTool(Name="assign_installed_operation_tool"),Description("Assign an already installed project or magazine tool, without import. Confirm the target with the user. Repeat the exact search dimensions, ID and Identity from find_tools_for_selected_operation. Does not save the project.")]
     public Task<string> AssignInstalledOperationTool(int processId,string projectPath,string operationId,string toolId,string identity,
         string operationUnits,string mode,double widthMm,double depthMm,double breakthroughMm=0,double? innerRadiusMm=null) =>
+        WritesOff() is { } off ? Task.FromResult(off) :
         Run("machine-assign",processId,[.. GeometryArgs(operationUnits,mode,widthMm,depthMm,breakthroughMm,innerRadiusMm),projectPath,operationId,toolId,identity]);
 
     [McpServerTool(Name="assign_operation_mill"),Description("After user confirmation, assign the selected catalogue end mill or saved assembly to the selected milling operation. Use IDs from get_milling_operation and find_operation_mills. Does not save the project.")]
@@ -220,7 +226,7 @@ public sealed partial class LocalEncyTools(IToolsApi api, TokenProvider tokens)
         AssignCutter(false,processId,projectPath,operationId,componentId,libraryId,assemblyId);
 
     private Task<string> AssignCutter(bool mill,int processId,string projectPath,string operationId,string componentId,string? libraryId,string? assemblyId) =>
-        Replies.WithToken(tokens, async token =>
+        WritesOff() is { } off ? Task.FromResult(off) : Replies.WithToken(tokens, async token =>
         {
             if (Ids.Of(componentId) is not { } cid) return Ids.NotAComponent(componentId);
             if (string.IsNullOrWhiteSpace(projectPath) || !Guid.TryParse(operationId, out _)

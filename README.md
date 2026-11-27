@@ -36,10 +36,10 @@ Version 0.7.3 applies an article cutting condition to an operation in the open E
 | `delete_library` | Deletes a library for good. Only on the person's explicit request. |
 | `export_shelf_gtc` | Exports the available catalogue parts of saved assemblies to a GTC zip. |
 | `list_project_tools` | Local Windows stdio: read a running ENCY project's actual magazines, positions and tool captions. With multiple instances specify the process ID. |
-| `install_shelf_in_project` | Local Windows: install a saved shelf directly, returning magazine positions and the actual adapters from cutter to machine. |
-| `apply_operation_cutting` | Local Windows: apply a speed and feed from a numbered article condition to a specific operation in the open project. Select the endpoint, units and project measurement system. |
+| `install_shelf_in_project` | Local Windows: install a saved shelf directly, returning magazine positions and the actual adapters from cutter to machine. Writes only when `TOOLS_MCP_ENABLE_LIVE_BATCH_CHANGES=1` is set; otherwise it refuses. |
+| `apply_operation_cutting` | Local Windows: apply a speed and feed from a numbered article condition to a specific operation in the open project. Select the endpoint, units and project measurement system. Applying writes only when `TOOLS_MCP_ENABLE_LIVE_BATCH_CHANGES=1` is set; the preview always runs. |
 | `list_tool_operations` | Local Windows: find operation names and IDs by magazine and tool position. |
-| `import_project_gtc` | Local Windows stdio: import a GTC zip (absolute path) into the indicated open project. Pass the PID and project path from `list_project_tools`. Reports the created library, actual slots and skipped tools. Save in ENCY to keep the changes. |
+| `import_project_gtc` | Local Windows stdio: import a GTC zip (absolute path) into the indicated open project. Pass the PID and project path from `list_project_tools`. Reports the created library, actual slots and skipped tools. Save in ENCY to keep the changes. Writes only when `TOOLS_MCP_ENABLE_LIVE_BATCH_CHANGES=1` is set; otherwise it refuses. |
 | `export_library` | Saves a library as one `.mKit`. |
 | `export_tool_list` | Saves the library's ENCY tool list as a `.tom` file and reports how many assemblies were exported or omitted. |
 | `export_assembly` | Downloads one saved assembly as an ENCY `.sc12tool` file. |
@@ -61,11 +61,11 @@ Version 0.7.3 applies an article cutting condition to an operation in the open E
 | `audit_project_tools` (local Windows) | Review all project operations, assigned tools, groups of holes, missing geometry and reasons a tool fails. Pass a personal library ID to compare recorded tools and magazine positions. |
 | `export_project_setup_sheet` (local Windows) | Save the open projectвЂ™s tooling setup sheet as a CSV for the operator. |
 | `find_tools_for_selected_operation` (local Windows) | Search installed tools, then matching personal assemblies and catalogue tools. Specify ENCY units. Recognized geometry comes from the selected project. Supply missing dimensions or confirm there is no inside corner. Each match reports required and available reach. |
-| `assign_installed_operation_tool` (local Windows) | Assign an existing project tool or magazine node, without importing it again. Rechecks the project, operation, geometry and tool identity. |
-| `assign_operation_mill` (local Windows) | Import the selected end mill or warehouse assembly into the selected milling operation after confirmation. |
+| `assign_installed_operation_tool` (local Windows) | Assign an existing project tool or magazine node, without importing it again. Rechecks the project, operation, geometry and tool identity. Writes only when `TOOLS_MCP_ENABLE_LIVE_BATCH_CHANGES=1` is set; otherwise it refuses. |
+| `assign_operation_mill` (local Windows) | Import the selected end mill or warehouse assembly into the selected milling operation after confirmation. Writes only when `TOOLS_MCP_ENABLE_LIVE_BATCH_CHANGES=1` is set; otherwise it refuses. |
 | `find_operation_drills` | Search by hole diameter and depth in mm. Returns compatible working lengths, matching personal assemblies first, and permitted supplier data for the requested material. Choose tip, full-diameter blind, or through depth with breakout. |
 | `get_drilling_operation` (local Windows) | Read the selected ENCY drilling cycle, hole dimensions and workpiece material when set. Supply the project's displayed units. |
-| `assign_operation_drill` (local Windows) | After confirming the target operation and drill, assign the selected component or saved assembly in the open project. Pass its IDs from the search and operation readout. |
+| `assign_operation_drill` (local Windows) | After confirming the target operation and drill, assign the selected component or saved assembly in the open project. Pass its IDs from the search and operation readout. Writes only when `TOOLS_MCP_ENABLE_LIVE_BATCH_CHANGES=1` is set; otherwise it refuses. |
 | `get_cutting_data` | Reads the manufacturer's cutting table for a component, optionally filtered by material group or material number. |
 
 Every reply that leaves something in a library ends with how to open it in ENCY: the Tools catalogue extension
